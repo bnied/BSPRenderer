@@ -1,0 +1,10 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Xcode (if you later open the package in Xcode)
+DerivedData/
+*.xcuserdatad/
+
+# macOS
+.DS_Store

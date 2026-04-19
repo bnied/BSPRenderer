@@ -48,7 +48,7 @@ final class GameView: NSView {
         let now = CACurrentMediaTime()
         let dt = min(0.05, now - lastTime)
         lastTime = now
-        player.update(dt: dt, keys: keys)
+        player.update(dt: dt, keys: keys, bspRoot: bspRoot)
         renderer.render(player: player, bspRoot: bspRoot)
         setNeedsDisplay(bounds)
     }
@@ -56,5 +56,30 @@ final class GameView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         renderer.blit(to: ctx, in: bounds)
+        drawHUD()
+    }
+
+    private func drawHUD() {
+        let si = findSector(pos: player.pos, node: bspRoot)
+        let s = sectors[si]
+        let eyeZ = s.floorH + player.eyeOverFloor
+        let text = String(
+            format: "sector %d   floor %+d   ceil %+d   eyeZ %+d",
+            si, Int(s.floorH), Int(s.ceilH), Int(eyeZ)
+        )
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+            .foregroundColor: NSColor.white,
+        ]
+        let astr = NSAttributedString(string: text, attributes: attrs)
+        let size = astr.size()
+        let pad: CGFloat = 6
+        let origin = CGPoint(x: 8, y: bounds.height - size.height - 8)
+        NSColor(white: 0, alpha: 0.55).setFill()
+        NSBezierPath(rect: CGRect(
+            x: origin.x - pad, y: origin.y - pad / 2,
+            width: size.width + 2 * pad, height: size.height + pad
+        )).fill()
+        astr.draw(at: origin)
     }
 }

@@ -126,6 +126,53 @@ final class Renderer {
         }
     }
 
+    // Fill a vertical strip of a horizontal plane (floor or ceiling) by
+    // inverse-projecting each pixel to its world (X, Y), sampling a
+    // checkerboard, and depth-shading. `planeHeight` is signed: positive for
+    // ceiling (above eye), negative for floor (below eye).
+    @inline(__always)
+    private func fillPlaneColumn(_ x: Int, _ yLo: Int, _ yHi: Int,
+                                 planeHeight: Double,
+                                 focal: Double, halfW: Double, halfH: Double,
+                                 playerPos: Vec2, cosA: Double, sinA: Double,
+                                 sectorLight: Double, color: RGBA) {
+        if yLo > yHi { return }
+        let absH = abs(planeHeight)
+        let xOffset = Double(x) - halfW
+        // 70%-brightness dark tile, precomputed once per strip.
+        let darkColor = RGBA(
+            r: UInt8(Double(color.r) * 0.7),
+            g: UInt8(Double(color.g) * 0.7),
+            b: UInt8(Double(color.b) * 0.7),
+            a: 255
+        )
+        let tileBits = 4   // 16-unit tiles (1 << 4)
+        let tileBias = 1 << 20   // keep integer coords positive for parity math
+        var i = (yLo * bufW + x) * 4
+        let stride = bufW * 4
+        for y in yLo ... yHi {
+            let absDy = abs(Double(y) - halfH)
+            let depth = absDy > 0.0001 ? absH * focal / absDy : 1e9
+            // View-space right offset for this pixel at this depth.
+            let r = xOffset * depth / focal
+            // forward = (cosA, sinA); right = (-sinA, cosA)
+            let wx = playerPos.x + depth * cosA - r * sinA
+            let wy = playerPos.y + depth * sinA + r * cosA
+            let tx = (Int(wx) + tileBias) >> tileBits
+            let ty = (Int(wy) + tileBias) >> tileBits
+            let tile = (tx ^ ty) & 1
+            let base = tile == 0 ? color : darkColor
+            let falloff = 1.0 / (1.0 + depth * 0.004)
+            let light = max(0.15, min(1.0, sectorLight * falloff))
+            let c = shade(base, light * 0.9)
+            pixels[i] = c.r
+            pixels[i + 1] = c.g
+            pixels[i + 2] = c.b
+            pixels[i + 3] = 255
+            i += stride
+        }
+    }
+
     // MARK: seg drawing
 
     private func drawSeg(_ seg: Seg,
@@ -242,17 +289,25 @@ final class Renderer {
             let top = yTop[x]
             let bot = yBot[x]
 
-            // Ceiling fill (front sector's ceiling above the wall top).
+            // Ceiling fill (front sector's ceiling above the wall top) — per-pixel depth.
             if ceilY > top {
                 let yLo = top
                 let yHi = min(ceilY - 1, bot)
-                fillColumn(x, yLo, yHi, shade(front.ceilColor, light * 0.9))
+                fillPlaneColumn(x, yLo, yHi,
+                                planeHeight: fCeil,
+                                focal: focal, halfW: halfW, halfH: halfH,
+                                playerPos: player.pos, cosA: cosA, sinA: sinA,
+                                sectorLight: frontLight, color: front.ceilColor)
             }
-            // Floor fill (front sector's floor below the wall bottom).
+            // Floor fill (front sector's floor below the wall bottom) — per-pixel depth.
             if floorY < bot {
                 let yLo = max(floorY + 1, top)
                 let yHi = bot
-                fillColumn(x, yLo, yHi, shade(front.floorColor, light * 0.9))
+                fillPlaneColumn(x, yLo, yHi,
+                                planeHeight: fFloor,
+                                focal: focal, halfW: halfW, halfH: halfH,
+                                playerPos: player.pos, cosA: cosA, sinA: sinA,
+                                sectorLight: frontLight, color: front.floorColor)
             }
 
             if seg.backSector == nil {

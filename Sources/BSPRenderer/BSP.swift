@@ -66,15 +66,24 @@ func buildBSP(_ segs: [Seg]) -> BSPNode {
     let part = segs[bestIdx]
     let pStart = part.v1
     let pDelta = Vec2(x: part.v2.x - part.v1.x, y: part.v2.y - part.v1.y)
-    var leftSegs: [Seg] = []
-    var rightSegs: [Seg] = [part]
+    var leftSegs: [Seg] = [part]
+    var rightSegs: [Seg] = []
     for j in 0 ..< segs.count where j != bestIdx {
         let seg = segs[j]
         switch classify(seg: seg, partStart: pStart, partDelta: pDelta) {
         case .left:
             leftSegs.append(seg)
-        case .right, .collinear:
+        case .right:
             rightSegs.append(seg)
+        case .collinear:
+            // Same direction as partition → front side (left); opposite → back side (right).
+            let sdx = seg.v2.x - seg.v1.x
+            let sdy = seg.v2.y - seg.v1.y
+            if pDelta.x * sdx + pDelta.y * sdy >= 0 {
+                leftSegs.append(seg)
+            } else {
+                rightSegs.append(seg)
+            }
         case .straddle(let ix):
             let a = Seg(v1: seg.v1, v2: ix, frontSector: seg.frontSector, backSector: seg.backSector, lineDefIndex: seg.lineDefIndex)
             let b = Seg(v1: ix, v2: seg.v2, frontSector: seg.frontSector, backSector: seg.backSector, lineDefIndex: seg.lineDefIndex)

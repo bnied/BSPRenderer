@@ -105,9 +105,9 @@ let sectors: [Sector] = [
         ceilColor:  RGBA(r:  72, g:  44, b:  34, a: 255),
         light: 0.95
     ),
-    // 2: Alcove — green, low ceiling
+    // 2: Alcove — green, low ceiling, raised floor
     Sector(
-        floorH: 0, ceilH: 48,
+        floorH: -12, ceilH: 48,
         floorColor: RGBA(r:  58, g:  84, b:  52, a: 255),
         ceilColor:  RGBA(r:  42, g:  62, b:  40, a: 255),
         light: 0.9
@@ -124,7 +124,7 @@ let sectors: [Sector] = [
         floorH: -12, ceilH: 80,
         floorColor: RGBA(r:  76, g:  52, b:  96, a: 255),
         ceilColor:  RGBA(r:  52, g:  38, b:  76, a: 255),
-        light: 0.92
+        light: 0.7
     ),
 ]
 

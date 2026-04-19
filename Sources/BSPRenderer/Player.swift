@@ -20,7 +20,7 @@ final class Player {
         static let up: UInt16 = 126
     }
 
-    func update(dt: Double, keys: Set<UInt16>) {
+    func update(dt: Double, keys: Set<UInt16>, bspRoot: BSPNode) {
         let rot = rotSpeed * dt
         let mv = moveSpeed * dt
 
@@ -36,19 +36,31 @@ final class Player {
 
         // Axis-separated probe against all solid linedefs with a player radius.
         let radius = 8.0
+        let currentFloorH = sectors[findSector(pos: pos, node: bspRoot)].floorH
         let tryX = Vec2(x: pos.x + dx, y: pos.y)
-        if !collides(tryX, radius: radius) { pos.x = tryX.x }
+        if !collides(tryX, radius: radius, currentFloorH: currentFloorH) { pos.x = tryX.x }
         let tryY = Vec2(x: pos.x, y: pos.y + dy)
-        if !collides(tryY, radius: radius) { pos.y = tryY.y }
+        if !collides(tryY, radius: radius, currentFloorH: currentFloorH) { pos.y = tryY.y }
     }
 
-    private func collides(_ p: Vec2, radius: Double) -> Bool {
+    private func collides(_ p: Vec2, radius: Double, currentFloorH: Double) -> Bool {
+        let maxStepUp = 24.0
         for l in linedefs {
-            // Allow passage through two-sided linedefs (floor-height blocking not modeled yet).
-            if l.backSector != nil { continue }
             let a = vertices[l.v1]
             let b = vertices[l.v2]
-            if pointSegmentDistance(p, a, b) < radius { return true }
+            if pointSegmentDistance(p, a, b) >= radius { continue }
+            guard let bi = l.backSector else { return true }   // solid wall
+            let front = sectors[l.frontSector]
+            let back = sectors[bi]
+            // Opening must clear the player's standing height.
+            let openingTop = min(front.ceilH, back.ceilH)
+            let openingBottom = max(front.floorH, back.floorH)
+            if openingTop - openingBottom < eyeOverFloor { return true }
+            // Step-up check: determine which sector the probe is crossing into.
+            let pDelta = Vec2(x: b.x - a.x, y: b.y - a.y)
+            let side = pDelta.x * (p.y - a.y) - pDelta.y * (p.x - a.x)
+            let targetFloorH = side > 0 ? back.floorH : front.floorH
+            if targetFloorH - currentFloorH > maxStepUp { return true }
         }
         return false
     }

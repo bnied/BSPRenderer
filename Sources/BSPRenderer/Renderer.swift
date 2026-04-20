@@ -49,6 +49,10 @@ final class Renderer {
     var yBot: [Int]     // current open-region bottom per column (inclusive)
     var visplanes: [Visplane]   // 2 per sector: [floor, ceiling] pair per sector, in order
 
+    var slowMode = false
+    private var slowStep = 0          // columns revealed so far in the current cycle
+    private var slowColumnBudget = 0  // columns drawSeg may still emit this frame
+
     init(width: Int, height: Int) {
         self.bufW = width
         self.bufH = height
@@ -99,7 +103,7 @@ final class Renderer {
         let eyeZ = player.eyeZ
         let cosA = cos(player.angle), sinA = sin(player.angle)
 
-        traverseBSP(bspRoot, player: player.pos) { seg in
+        let drawOne: (Seg) -> Void = { seg in
             self.drawSeg(
                 seg,
                 player: player,
@@ -108,6 +112,17 @@ final class Renderer {
                 fovHalfTan: fovHalfTan, focal: focal,
                 eyeZ: eyeZ
             )
+        }
+
+        if slowMode {
+            var segs: [Seg] = []
+            traverseBSP(bspRoot, player: player.pos) { segs.append($0) }
+            slowColumnBudget = slowStep
+            for seg in segs { drawOne(seg) }
+            // If budget wasn't exhausted, we drew everything — loop back to 0.
+            slowStep = slowColumnBudget > 0 ? 0 : slowStep + 1
+        } else {
+            traverseBSP(bspRoot, player: player.pos, visit: drawOne)
         }
 
         renderVisplanes(focal: focal, halfW: halfW, horizon: horizon,
@@ -352,6 +367,10 @@ final class Renderer {
         let dx = sx2 - sx1
 
         for x in xStart ... xEnd {
+            if slowMode {
+                if slowColumnBudget <= 0 { return }
+                slowColumnBudget -= 1
+            }
             if yTop[x] > yBot[x] { continue }
             let tLin = (Double(x) - sx1) / dx
             let invD = (1.0 - tLin) * invD1 + tLin * invD2

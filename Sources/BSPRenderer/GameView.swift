@@ -38,6 +38,7 @@ final class GameView: NSView {
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { NSApp.terminate(nil); return }   // Esc
+        if event.keyCode == 48 { renderer.slowMode.toggle(); return }   // Tab
         keys.insert(event.keyCode)
     }
     override func keyUp(with event: NSEvent) {
@@ -62,8 +63,9 @@ final class GameView: NSView {
     private func drawHUD() {
         let si = findSector(pos: player.pos, node: bspRoot)
         let s = sectors[si]
+        let slowTag = renderer.slowMode ? "   [SLOW]" : ""
         let text = String(
-            format: "sector %d   floor %+d   ceil %+d   feetZ %+d   eyeZ %+d",
+            format: "sector %d   floor %+d   ceil %+d   feetZ %+d   eyeZ %+d\(slowTag)",
             si, Int(s.floorH), Int(s.ceilH), Int(player.feetZ), Int(player.eyeZ)
         )
         let attrs: [NSAttributedString.Key: Any] = [

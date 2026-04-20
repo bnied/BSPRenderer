@@ -112,16 +112,16 @@ let sectors: [Sector] = [
         ceilColor:  RGBA(r:  42, g:  62, b:  40, a: 255),
         light: 0.9
     ),
-    // 3: Diagonal corridor — blue, slight step up, slight ceiling drop
+    // 3: Diagonal corridor — blue, slight step up
     Sector(
-        floorH: 4, ceilH: 56,
+        floorH: 4, ceilH: 68,
         floorColor: RGBA(r:  48, g:  62, b:  96, a: 255),
         ceilColor:  RGBA(r:  34, g:  46, b:  78, a: 255),
         light: 0.82
     ),
-    // 4: South chamber — violet, sunken floor, tall ceiling
+    // 4: South chamber — violet, sunken floor
     Sector(
-        floorH: -12, ceilH: 80,
+        floorH: -12, ceilH: 52,
         floorColor: RGBA(r:  76, g:  52, b:  96, a: 255),
         ceilColor:  RGBA(r:  52, g:  38, b:  76, a: 255),
         light: 0.7

@@ -2,11 +2,30 @@ import Foundation
 
 final class Player {
     var pos = Vec2(x: 80, y: 100)
+    // Physical Z of the player's feet (tracks the current sector's floor).
+    var feetZ: Double = 0.0
     var angle = 0.0
     let fov = 70.0 * .pi / 180.0
     let moveSpeed = 140.0
     let rotSpeed = 2.4
     let eyeOverFloor = 41.0
+    // How much the eye follows the feet as the floor changes.
+    //   1.0 = eye rigidly attached to body (eye = feet + eyeOverFloor). Camera
+    //         physically rises/falls the full step amount, but the floor stays
+    //         at a constant 41 below eye, so its screen position doesn't shift.
+    //   0.0 = fixed-baseline camera (eye stays at baseline). Camera doesn't
+    //         physically move, but the floor's screen position reflects the
+    //         sector's true Z, so step direction is visible in the scene.
+    //   0.5 = halfway: eye moves half the step amount, floor shifts half. Both
+    //         cues are visible simultaneously.
+    let eyeFollowFactor: Double = 1.0
+    // Baseline eye Z — where a neutral camera sits (main hall's eye level).
+    let baselineEyeZ: Double = 41.0
+
+    var eyeZ: Double {
+        let feetBaseline = baselineEyeZ - eyeOverFloor  // main hall's floor
+        return baselineEyeZ + eyeFollowFactor * (feetZ - feetBaseline)
+    }
 
     // macOS keyCode constants used for movement.
     private enum Key {
@@ -41,6 +60,11 @@ final class Player {
         if !collides(tryX, radius: radius, currentFloorH: currentFloorH) { pos.x = tryX.x }
         let tryY = Vec2(x: pos.x, y: pos.y + dy)
         if !collides(tryY, radius: radius, currentFloorH: currentFloorH) { pos.y = tryY.y }
+
+        // Feet track the current sector's floor exactly. No gravity/air time
+        // needed because the camera is fixed-baseline — visual step-up/down
+        // comes from the floor itself moving on screen, not the camera.
+        feetZ = sectors[findSector(pos: pos, node: bspRoot)].floorH
     }
 
     private func collides(_ p: Vec2, radius: Double, currentFloorH: Double) -> Bool {

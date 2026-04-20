@@ -1,12 +1,53 @@
 import Foundation
 import CoreGraphics
 
+// A visplane accumulates per-column coverage for one sector's floor or
+// ceiling. `drawSeg` records spans into it while walking the BSP, then
+// the deferred pass renders the plane as scanlines using per-pixel
+// inverse projection.
+struct Visplane {
+    let sectorIndex: Int
+    let isCeiling: Bool
+    var top: [Int]   // inclusive upper bound per column; Int.max if uncovered
+    var bot: [Int]   // inclusive lower bound per column; Int.min if uncovered
+    var minX: Int
+    var maxX: Int
+
+    init(sectorIndex: Int, isCeiling: Bool, width: Int) {
+        self.sectorIndex = sectorIndex
+        self.isCeiling = isCeiling
+        self.top = [Int](repeating: Int.max, count: width)
+        self.bot = [Int](repeating: Int.min, count: width)
+        self.minX = width
+        self.maxX = -1
+    }
+
+    mutating func reset() {
+        for i in 0 ..< top.count {
+            top[i] = Int.max
+            bot[i] = Int.min
+        }
+        minX = top.count
+        maxX = -1
+    }
+
+    @inline(__always)
+    mutating func extend(_ x: Int, _ yLo: Int, _ yHi: Int) {
+        if yLo > yHi { return }
+        if yLo < top[x] { top[x] = yLo }
+        if yHi > bot[x] { bot[x] = yHi }
+        if x < minX { minX = x }
+        if x > maxX { maxX = x }
+    }
+}
+
 final class Renderer {
     let bufW: Int
     let bufH: Int
     var pixels: [UInt8]
     var yTop: [Int]     // current open-region top per column (inclusive)
     var yBot: [Int]     // current open-region bottom per column (inclusive)
+    var visplanes: [Visplane]   // 2 per sector: [floor, ceiling] pair per sector, in order
 
     init(width: Int, height: Int) {
         self.bufW = width
@@ -14,20 +55,33 @@ final class Renderer {
         self.pixels = [UInt8](repeating: 0, count: width * height * 4)
         self.yTop = [Int](repeating: 0, count: width)
         self.yBot = [Int](repeating: height - 1, count: width)
+        var planes: [Visplane] = []
+        planes.reserveCapacity(sectors.count * 2)
+        for si in 0 ..< sectors.count {
+            planes.append(Visplane(sectorIndex: si, isCeiling: false, width: width))
+            planes.append(Visplane(sectorIndex: si, isCeiling: true, width: width))
+        }
+        self.visplanes = planes
     }
 
     // MARK: frame entry
 
     func render(player: Player, bspRoot: BSPNode) {
-        // Reset per-column open region.
+        // Reset per-column open region and per-frame visplane coverage.
         for x in 0 ..< bufW {
             yTop[x] = 0
             yBot[x] = bufH - 1
         }
-        // Background fill (dim ceiling on top, dim floor on bottom) as a fallback so any
-        // unclosed columns look plausible.
+        for i in 0 ..< visplanes.count {
+            visplanes[i].reset()
+        }
         let playerSector = findSector(pos: player.pos, node: bspRoot)
         let sec = sectors[playerSector]
+        let halfW = Double(bufW) / 2.0
+        let halfH = Double(bufH) / 2.0
+        let horizon = halfH
+        // Background fill (dim ceiling on top, dim floor on bottom) as a fallback so any
+        // unclosed columns look plausible.
         for y in 0 ..< bufH {
             let c = y < bufH / 2 ? sec.ceilColor : sec.floorColor
             let dc = shade(c, 0.55)
@@ -40,12 +94,9 @@ final class Renderer {
                 pixels[i + 3] = 255
             }
         }
-
-        let halfW = Double(bufW) / 2.0
-        let halfH = Double(bufH) / 2.0
         let fovHalfTan = tan(player.fov / 2.0)
         let focal = halfW / fovHalfTan
-        let eyeZ = sec.floorH + player.eyeOverFloor
+        let eyeZ = player.eyeZ
         let cosA = cos(player.angle), sinA = sin(player.angle)
 
         traverseBSP(bspRoot, player: player.pos) { seg in
@@ -53,14 +104,41 @@ final class Renderer {
                 seg,
                 player: player,
                 cosA: cosA, sinA: sinA,
-                halfW: halfW, halfH: halfH,
+                halfW: halfW, horizon: horizon,
                 fovHalfTan: fovHalfTan, focal: focal,
                 eyeZ: eyeZ
             )
         }
 
+        renderVisplanes(focal: focal, halfW: halfW, horizon: horizon,
+                        playerPos: player.pos, cosA: cosA, sinA: sinA,
+                        eyeZ: eyeZ)
+
         drawMinimap(player: player)
         drawCrosshair()
+    }
+
+    private func renderVisplanes(focal: Double, halfW: Double, horizon: Double,
+                                 playerPos: Vec2, cosA: Double, sinA: Double,
+                                 eyeZ: Double) {
+        for plane in visplanes {
+            if plane.maxX < plane.minX { continue }
+            let sector = sectors[plane.sectorIndex]
+            let planeZ = plane.isCeiling ? sector.ceilH : sector.floorH
+            let planeHeight = planeZ - eyeZ
+            let color = plane.isCeiling ? sector.ceilColor : sector.floorColor
+            let sectorLight = sector.light
+            for x in plane.minX ... plane.maxX {
+                let yLo = plane.top[x]
+                let yHi = plane.bot[x]
+                if yLo > yHi { continue }
+                fillPlaneColumn(x, yLo, yHi,
+                                planeHeight: planeHeight,
+                                focal: focal, halfW: halfW, horizon: horizon,
+                                playerPos: playerPos, cosA: cosA, sinA: sinA,
+                                sectorLight: sectorLight, color: color)
+            }
+        }
     }
 
     // MARK: blit
@@ -133,7 +211,7 @@ final class Renderer {
     @inline(__always)
     private func fillPlaneColumn(_ x: Int, _ yLo: Int, _ yHi: Int,
                                  planeHeight: Double,
-                                 focal: Double, halfW: Double, halfH: Double,
+                                 focal: Double, halfW: Double, horizon: Double,
                                  playerPos: Vec2, cosA: Double, sinA: Double,
                                  sectorLight: Double, color: RGBA) {
         if yLo > yHi { return }
@@ -151,7 +229,7 @@ final class Renderer {
         var i = (yLo * bufW + x) * 4
         let stride = bufW * 4
         for y in yLo ... yHi {
-            let absDy = abs(Double(y) - halfH)
+            let absDy = abs(Double(y) - horizon)
             let depth = absDy > 0.0001 ? absH * focal / absDy : 1e9
             // View-space right offset for this pixel at this depth.
             let r = xOffset * depth / focal
@@ -178,7 +256,7 @@ final class Renderer {
     private func drawSeg(_ seg: Seg,
                          player: Player,
                          cosA: Double, sinA: Double,
-                         halfW: Double, halfH: Double,
+                         halfW: Double, horizon: Double,
                          fovHalfTan: Double, focal: Double,
                          eyeZ: Double) {
 
@@ -283,31 +361,23 @@ final class Renderer {
             let falloff = 1.0 / (1.0 + depth * 0.004)
             let light = max(0.15, min(1.0, frontLight * falloff))
 
-            let ceilY  = Int((halfH - fCeil  * focal * invD).rounded())
-            let floorY = Int((halfH - fFloor * focal * invD).rounded())
+            let ceilY  = Int((horizon - fCeil  * focal * invD).rounded())
+            let floorY = Int((horizon - fFloor * focal * invD).rounded())
 
             let top = yTop[x]
             let bot = yBot[x]
 
-            // Ceiling fill (front sector's ceiling above the wall top) — per-pixel depth.
+            // Ceiling fill → visplane span (deferred to post-BSP pass).
             if ceilY > top {
                 let yLo = top
                 let yHi = min(ceilY - 1, bot)
-                fillPlaneColumn(x, yLo, yHi,
-                                planeHeight: fCeil,
-                                focal: focal, halfW: halfW, halfH: halfH,
-                                playerPos: player.pos, cosA: cosA, sinA: sinA,
-                                sectorLight: frontLight, color: front.ceilColor)
+                visplanes[seg.frontSector * 2 + 1].extend(x, yLo, yHi)
             }
-            // Floor fill (front sector's floor below the wall bottom) — per-pixel depth.
+            // Floor fill → visplane span (deferred to post-BSP pass).
             if floorY < bot {
                 let yLo = max(floorY + 1, top)
                 let yHi = bot
-                fillPlaneColumn(x, yLo, yHi,
-                                planeHeight: fFloor,
-                                focal: focal, halfW: halfW, halfH: halfH,
-                                playerPos: player.pos, cosA: cosA, sinA: sinA,
-                                sectorLight: frontLight, color: front.floorColor)
+                visplanes[seg.frontSector * 2].extend(x, yLo, yHi)
             }
 
             if seg.backSector == nil {
@@ -318,8 +388,8 @@ final class Renderer {
                 // Mark column fully occluded.
                 yTop[x] = bot + 1
             } else {
-                let backCeilY  = Int((halfH - bCeil  * focal * invD).rounded())
-                let backFloorY = Int((halfH - bFloor * focal * invD).rounded())
+                let backCeilY  = Int((horizon - bCeil  * focal * invD).rounded())
+                let backFloorY = Int((horizon - bFloor * focal * invD).rounded())
 
                 // Upper wall: exists when the back ceiling is lower in world (larger screen Y).
                 var newTop = max(ceilY, top)

@@ -62,10 +62,9 @@ final class GameView: NSView {
     private func drawHUD() {
         let si = findSector(pos: player.pos, node: bspRoot)
         let s = sectors[si]
-        let eyeZ = s.floorH + player.eyeOverFloor
         let text = String(
-            format: "sector %d   floor %+d   ceil %+d   eyeZ %+d",
-            si, Int(s.floorH), Int(s.ceilH), Int(eyeZ)
+            format: "sector %d   floor %+d   ceil %+d   feetZ %+d   eyeZ %+d",
+            si, Int(s.floorH), Int(s.ceilH), Int(player.feetZ), Int(player.eyeZ)
         )
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),

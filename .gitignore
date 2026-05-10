@@ -35,6 +35,10 @@ go/BSPRenderer
 # Vendored dependencies (we use go.mod, not vendor/):
 vendor/
 
+# ---- Rust (rust/) ----
+rust/target/
+rust/Cargo.lock.bak
+
 # ---- Python (python/) ----
 python/.venv/
 python/__pycache__/

@@ -2,7 +2,7 @@
 
 A DOOM-style software renderer written in Swift / AppKit. Runs as a macOS executable. Walls render with flat colors and distance-shaded per-column light falloff; floors and ceilings use perspective-correct inverse-projected checkerboard via a visplane system.
 
-This is the original version. See also the [C++ port](../cpp/), [Go port](../go/), and [Python port](../python/) — same engine, same level, same controls, three other languages.
+This is the original version. See also the [C++ port](../cpp/), [Go port](../go/), [Python port](../python/), and [Rust port](../rust/) — same engine, same level, same controls, four other languages.
 
 ## Build and run
 

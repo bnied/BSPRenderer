@@ -2,7 +2,7 @@
 
 A DOOM-style software renderer written in C++20 with [SDL3](https://www.libsdl.org/). Walls render with flat colors and distance-shaded per-column light falloff; floors and ceilings use perspective-correct inverse-projected checkerboard via a visplane system.
 
-This is a C++ port of the original [Swift/AppKit version](../swift/), and a sibling of the [Go port](../go/) and [Python port](../python/). The architecture is identical across all four.
+This is a C++ port of the original [Swift/AppKit version](../swift/), and a sibling of the [Go port](../go/), [Python port](../python/), and [Rust port](../rust/). The architecture is identical across all five.
 
 ## Build and run
 

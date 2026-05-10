@@ -2,7 +2,7 @@
 
 A DOOM-style software renderer written in Go with [Ebitengine](https://ebitengine.org/) (Ebiten v2). Walls render with flat colors and distance-shaded per-column light falloff; floors and ceilings use perspective-correct inverse-projected checkerboard via a visplane system.
 
-This is a Go port of the original [Swift/AppKit version](../swift/), and a sibling of the [C++ port](../cpp/) and [Python port](../python/). The architecture is identical across all four.
+This is a Go port of the original [Swift/AppKit version](../swift/), and a sibling of the [C++ port](../cpp/), [Python port](../python/), and [Rust port](../rust/). The architecture is identical across all five.
 
 ## Build and run
 

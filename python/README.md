@@ -2,7 +2,7 @@
 
 A DOOM-style software renderer written in Python with [pygame-ce](https://pyga.me/) and [numpy](https://numpy.org/). Walls render with flat colors and distance-shaded per-column light falloff; floors and ceilings use perspective-correct inverse-projected checkerboard via a visplane system.
 
-This is a Python port of the original [Swift/AppKit version](../swift/), and a sibling of the [Go port](../go/) and [C++ port](../cpp/). The architecture is identical across all four.
+This is a Python port of the original [Swift/AppKit version](../swift/), and a sibling of the [C++ port](../cpp/), [Go port](../go/), and [Rust port](../rust/). The architecture is identical across all five.
 
 ## Build and run
 

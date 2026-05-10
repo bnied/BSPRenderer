@@ -23,12 +23,16 @@ type Player struct {
 	baselineEyeZ    float64 // eye Z when standing in a "baseline" sector
 }
 
-// NewPlayer drops the player at a sensible spawn point in the main hall,
-// facing +x.
+// NewPlayer drops the player just north of the hub's south wall, facing
+// north — looking straight down the catwalk into the colored staircase and
+// the bright overlook at the end. The pillar is behind the player, so the
+// first frame shows off the deep portal chain (hub → catwalk → 4 stair
+// sectors → overlook) rather than being dominated by the pillar. Turn
+// around to discover the pillar, the pit (south), and the corridor (east).
 func NewPlayer() *Player {
 	return &Player{
-		pos:             Vec2{80, 100},
-		angle:           0,
+		pos:             Vec2{120, 50},
+		angle:           -math.Pi / 2,
 		fov:             70.0 * math.Pi / 180.0,
 		moveSpeed:       140.0,
 		rotSpeed:        2.4,

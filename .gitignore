@@ -1,10 +1,49 @@
-# Swift Package Manager
-.build/
-.swiftpm/
-
-# Xcode (if you later open the package in Xcode)
-DerivedData/
-*.xcuserdatad/
-
-# macOS
+# ---- OS / editor ----
 .DS_Store
+*.swp
+*~
+
+# ---- Tooling (any port) ----
+# Per-user Claude Code config; the shared `settings.json` (no `.local`) stays
+# tracked so project-wide permissions are committed.
+**/.claude/settings.local.json
+
+# ---- Swift (swift/) ----
+# `swift build` / `swift run` output:
+.build/
+# Xcode integration scratch (only the project-level config in .swiftpm/ is
+# typically committed; everything else is per-user):
+.swiftpm/xcode/
+.swiftpm/configuration/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcuserdatad/
+# Note: Package.resolved is intentionally NOT ignored — it pins dependency
+# versions for executables and should be committed.
+
+# ---- C++ (cpp/) ----
+cpp/bsprenderer
+cpp/src/*.o
+cpp/src/*.d
+*.dSYM/
+
+# ---- Go (go/) ----
+# The default `go build` output binary in this repo:
+go/BSPRenderer
+# Cross-compiled / Windows binaries:
+*.exe
+# Vendored dependencies (we use go.mod, not vendor/):
+vendor/
+
+# ---- Python (python/) ----
+python/.venv/
+python/__pycache__/
+python/**/__pycache__/
+python/*.py[cod]
+python/*.egg-info/
+python/build/
+python/dist/
+python/wheels/
+python/.pytest_cache/
+python/.mypy_cache/
+python/.ruff_cache/

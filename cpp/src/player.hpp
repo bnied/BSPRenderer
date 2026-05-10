@@ -33,9 +33,12 @@ public:
     // update advances the player by `dt` seconds with the given input state.
     void update(double dt, const Input& in, const BSPNode& bspRoot);
 
-    Vec2   pos             {80, 100};      // (x, y) world position
+    // Spawn just north of the hub's south wall, facing north — looking
+    // straight down the catwalk into the colored staircase chain. The
+    // octagonal pillar is behind the player (turn around to discover it).
+    Vec2   pos             {120, 50};      // (x, y) world position
     double feetZ           = 0;            // Z of the feet — tracks current sector's floorH
-    double angle           = 0;            // facing angle in radians
+    double angle           = -3.141592653589793 / 2.0; // facing angle in radians (north)
     double fov             = 70.0 * 3.141592653589793 / 180.0;
     double moveSpeed       = 140.0;
     double rotSpeed        = 2.4;

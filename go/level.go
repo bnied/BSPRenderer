@@ -10,7 +10,7 @@ package main
 //                                                       are one-sided. Kept to
 //                                                       avoid renumbering.
 //   2 catwalk      floor  20, ceil  88, deep green     — first step above hub
-//   3 pit          floor -30, ceil  50, violet
+//   3 pit          floor -20, ceil  50, violet     — 20 deep so you can climb back out
 //   4 corridor     floor   4, ceil  72, blue
 //   5 arena        floor  16, ceil 100, deep red
 //   6 stair 1      floor  30, ceil  88, orange         — start of staircase
@@ -140,8 +140,9 @@ var sectors = []Sector{
 		floorColor: RGBA{50, 78, 50, 255},
 		ceilColor:  RGBA{35, 55, 40, 255},
 		light:      0.95},
-	// 3: Pit — sunken violet chamber, lower ceiling.
-	{floorH: -30, ceilH: 50,
+	// 3: Pit — sunken violet chamber, lower ceiling. Floor at -20 (not deeper)
+	// because maxStepUp=24, so anything deeper would trap the player in the pit.
+	{floorH: -20, ceilH: 50,
 		floorColor: RGBA{60, 40, 90, 255},
 		ceilColor:  RGBA{40, 28, 60, 255},
 		light:      0.65},

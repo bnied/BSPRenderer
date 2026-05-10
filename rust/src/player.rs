@@ -49,12 +49,14 @@ pub struct Player {
 }
 
 impl Player {
-    /// Drop the player at a sensible spawn point in the main hall, facing +x.
+    /// Spawn just north of the hub's south wall, facing north — looking
+    /// straight down the catwalk into the colored staircase chain. The
+    /// octagonal pillar is behind the player (turn around to discover it).
     pub fn new() -> Self {
         Self {
-            pos: Vec2::new(80.0, 100.0),
+            pos: Vec2::new(120.0, 50.0),
             feet_z: 0.0,
-            angle: 0.0,
+            angle: -PI / 2.0,
             fov: 70.0 * PI / 180.0,
             move_speed: 140.0,
             rot_speed: 2.4,

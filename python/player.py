@@ -39,10 +39,12 @@ class Player:
     )
 
     def __init__(self) -> None:
-        # Drop the player at a sensible spawn point in the main hall, facing +x.
-        self.pos = Vec2(80, 100)
+        # Spawn just north of the hub's south wall, facing north — looking
+        # straight down the catwalk into the colored staircase chain. The
+        # octagonal pillar is behind the player (turn around to discover it).
+        self.pos = Vec2(120, 50)
         self.feet_z: float = 0.0
-        self.angle: float = 0.0
+        self.angle: float = -math.pi / 2
         self.fov: float = 70.0 * math.pi / 180.0
         self.move_speed: float = 140.0
         self.rot_speed: float = 2.4

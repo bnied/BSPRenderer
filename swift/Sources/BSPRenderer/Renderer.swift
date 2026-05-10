@@ -185,12 +185,15 @@ final class Renderer {
                 intent: .defaultIntent
             ) else { return }
 
-            // Our buffer has y=0 at the top; CG draws from bottom-left by default. Flip the CTM.
-            ctx.saveGState()
-            ctx.translateBy(x: 0, y: rect.height)
-            ctx.scaleBy(x: 1, y: -1)
+            // CGContext.draw(image:in:) places a CGImage with its top-left at the
+            // rect's top-left, matching the buffer's y=0-on-top convention. The
+            // flip-CTM trick that's commonly cited is for *Quartz primitives*
+            // (paths, fills) drawn over an upside-down bitmap — not for image
+            // blits. Adding the flip here actually inverts the framebuffer on
+            // screen, which is what was causing the player marker / minimap to
+            // move opposite to the heading and the staircase to render with the
+            // pit shown above the hub.
             ctx.draw(img, in: rect)
-            ctx.restoreGState()
         }
     }
 

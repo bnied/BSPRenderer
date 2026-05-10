@@ -1,10 +1,13 @@
 import Foundation
 
 final class Player {
-    var pos = Vec2(x: 80, y: 100)
+    // Spawn just north of the hub's south wall, facing north — looking
+    // straight down the catwalk into the colored staircase chain. The
+    // octagonal pillar is behind the player (turn around to discover it).
+    var pos = Vec2(x: 120, y: 50)
     // Physical Z of the player's feet (tracks the current sector's floor).
     var feetZ: Double = 0.0
-    var angle = 0.0
+    var angle: Double = -.pi / 2
     let fov = 70.0 * .pi / 180.0
     let moveSpeed = 140.0
     let rotSpeed = 2.4

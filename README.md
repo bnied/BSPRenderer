@@ -1,6 +1,6 @@
 # BSPRenderer
 
-A DOOM-style software renderer, ported to five languages. Walls render with flat colors and distance-shaded per-column light falloff; floors and ceilings use perspective-correct inverse-projected checkerboard via a [visplane](https://doomwiki.org/wiki/Visplane) system. Same engine, same hand-authored level, same controls — five implementations of the same architecture, side by side.
+A DOOM-style software renderer, ported to six languages. Walls render with flat colors and distance-shaded per-column light falloff; floors and ceilings use perspective-correct inverse-projected checkerboard via a [visplane](https://doomwiki.org/wiki/Visplane) system. Same engine, same hand-authored level, same controls — six implementations of the same architecture, side by side.
 
 ## Ports
 
@@ -11,8 +11,9 @@ A DOOM-style software renderer, ported to five languages. Walls render with flat
 | Go       | [`go/`](go/)         | Ebitengine v2                   | `cd go && go run .` |
 | Python   | [`python/`](python/) | pygame-ce (SDL2) + numpy        | `cd python && uv run main.py` |
 | Rust     | [`rust/`](rust/)     | winit + pixels (wgpu under the hood) | `cd rust && cargo run --release` |
+| Zig      | [`zig/`](zig/)       | SDL3 via `@cImport`             | `cd zig && zig build run` |
 
-Each port has its own README with build prerequisites, file layout, and notes on language/library specifics. The Swift version is the original; the other four are line-for-line ports of the same architecture.
+Each port has its own README with build prerequisites, file layout, and notes on language/library specifics. The Swift version is the original; the others are line-for-line ports of the same architecture.
 
 ## Controls (every port)
 
@@ -38,30 +39,32 @@ The same six-stage pipeline regardless of language:
 
 The level itself is identical across all five ports: 5 sectors with varied floor and ceiling heights, two pairs of non-axis-aligned walls (a diagonal corridor and a trapezoidal south chamber), four two-sided portals that exercise every upper/lower-wall combination.
 
-## Why five?
+## Why six?
 
-Started in Swift on macOS for fun. The other four ports translate that engine into idiomatic forms in each language without changing any behavior, which makes them an interesting reference for what a software-rendered 2.5-D engine looks like across:
+Started in Swift on macOS for fun. The other ports translate that engine into idiomatic forms in each language without changing any behavior, which makes them an interesting reference for what a software-rendered 2.5-D engine looks like across:
 
 - a value-typed, retain-counted, native-compiled language (Swift, the original)
 - a manual-memory, low-level systems language (C++)
 - a GC'd systems language designed for fast compilation (Go)
 - a slow-but-vectorized scripting language (Python + numpy for the hot floor/ceiling loop)
 - a borrow-checked, native-compiled systems language (Rust)
+- a manual-memory systems language with explicit allocators and compile-time evaluation, no destructors or borrow checker (Zig — uses `comptime` to bake the seg list into `.rodata`)
 
-The Swift / C++ / Go / Rust versions hit 60 FPS comfortably; the Python port lands around 30–45 FPS at 480×300 because per-column work in pure Python dominates even with numpy-vectorized inner loops.
+The Swift / C++ / Go / Rust / Zig versions hit 60 FPS comfortably; the Python port lands around 30–45 FPS at 480×300 because per-column work in pure Python dominates even with numpy-vectorized inner loops.
 
 ## Repo layout
 
 ```
 BSPRenderer/
 ├── README.md     ← you are here
-├── LICENSE       ← GPLv2, applies to all five ports
-├── .gitignore    ← covers all five languages' build artifacts
+├── LICENSE       ← GPLv2, applies to all six ports
+├── .gitignore    ← covers all six languages' build artifacts
 ├── swift/
 ├── cpp/
 ├── go/
 ├── python/
-└── rust/
+├── rust/
+└── zig/
 ```
 
 ## License

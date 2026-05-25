@@ -39,6 +39,10 @@ vendor/
 rust/target/
 rust/Cargo.lock.bak
 
+# ---- Zig (zig/) ----
+zig/zig-out/
+zig/.zig-cache/
+
 # ---- Python (python/) ----
 python/.venv/
 python/__pycache__/

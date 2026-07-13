@@ -59,9 +59,10 @@ struct AppState {
     SDL_Renderer* renderer = nullptr;
     SDL_Texture*  texture  = nullptr;
 
+    const Level*              level = nullptr; // program-lifetime showcase map
     std::unique_ptr<Player>   player;
     std::unique_ptr<Renderer> rendererSW; // software renderer, distinct from SDL_Renderer
-    std::unique_ptr<BSPNode>  bsp;
+    std::unique_ptr<Bsp>      bsp;
 
     Uint64 lastTickNS = 0;
 };
@@ -112,9 +113,11 @@ extern "C" SDL_AppResult SDL_AppInit(void** appstate, int /*argc*/, char* /*argv
     SDL_SetTextureScaleMode(state->texture, SDL_SCALEMODE_NEAREST);
 
     // Build the world.
+    const Level& level = Level::showcase();
+    state->level      = &level;
     state->player     = std::make_unique<Player>();
-    state->rendererSW = std::make_unique<Renderer>(internalW, internalH);
-    state->bsp        = buildBSP(generateSegs());
+    state->rendererSW = std::make_unique<Renderer>(internalW, internalH, level);
+    state->bsp        = std::make_unique<Bsp>(level);
     state->lastTickNS = SDL_GetTicksNS();
 
     *appstate = state;
@@ -157,7 +160,7 @@ extern "C" SDL_AppResult SDL_AppIterate(void* appstate) {
     in.turnL   = keys[SDL_SCANCODE_LEFT];
     in.turnR   = keys[SDL_SCANCODE_RIGHT];
 
-    state->player->update(dt, in, *state->bsp);
+    state->player->update(dt, in, *state->bsp, *state->level);
     state->rendererSW->render(*state->player, *state->bsp);
 
     // Push our RGBA buffer into the streaming texture.
@@ -172,8 +175,8 @@ extern "C" SDL_AppResult SDL_AppIterate(void* appstate) {
     // HUD overlay using SDL3's built-in 8x8 debug font. Logical-presentation
     // coordinates, so this lands in the top-left of the 480x300 internal
     // viewport regardless of window size.
-    int si = findSector(state->player->pos, *state->bsp);
-    const Sector& s = sectors[si];
+    int si = state->bsp->findSector(state->player->pos);
+    const Sector& s = state->level->sector(si);
     char hud[160];
     std::snprintf(hud, sizeof(hud),
                   "sector %d   floor %+d   ceil %+d   feetZ %+d   eyeZ %+d%s",

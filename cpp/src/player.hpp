@@ -12,6 +12,8 @@
 #include "bsp.hpp"
 #include "math.hpp"
 
+class Level;
+
 // Input is the per-tick boolean key state. The SDL layer fills this in from
 // the keyboard scancode array; the player has no idea SDL exists.
 struct Input {
@@ -31,7 +33,7 @@ public:
     double eyeZ() const;
 
     // update advances the player by `dt` seconds with the given input state.
-    void update(double dt, const Input& in, const BSPNode& bspRoot);
+    void update(double dt, const Input& in, const Bsp& bsp, const Level& level);
 
     // Spawn just north of the hub's south wall, facing north — looking
     // straight down the catwalk into the colored staircase chain. The
@@ -47,5 +49,6 @@ public:
     double baselineEyeZ    = 41.0;
 
 private:
-    bool collides(Vec2 pos, double radius, double currentFloorH) const;
+    bool collides(Vec2 pos, double radius, double currentFloorH,
+                  const Level& level) const;
 };

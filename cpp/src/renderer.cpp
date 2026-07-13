@@ -9,14 +9,15 @@
 // Construction & top-level render entry
 // ============================================================================
 
-Renderer::Renderer(int width, int height)
-    : bufW(width),
+Renderer::Renderer(int width, int height, const Level& level)
+    : level(level),
+      bufW(width),
       bufH(height),
       pixels(static_cast<size_t>(width) * height * 4),
       yTop(width),
       yBot(width) {
-    visplanes.reserve(sectors.size() * 2);
-    for (int si = 0; si < static_cast<int>(sectors.size()); ++si) {
+    visplanes.reserve(level.sectors().size() * 2);
+    for (int si = 0; si < static_cast<int>(level.sectors().size()); ++si) {
         visplanes.emplace_back(si, false, width); // floor at 2*si
         visplanes.emplace_back(si, true,  width); // ceiling at 2*si+1
     }
@@ -29,15 +30,15 @@ Renderer::Renderer(int width, int height)
 //   3. BSP walk → drawSeg for every visible seg, front-to-back.
 //   4. Visplane pass → flat floors/ceilings rasterized via inverse projection.
 //   5. Overlays: minimap and crosshair.
-void Renderer::render(const Player& player, const BSPNode& bspRoot) {
+void Renderer::render(const Player& player, const Bsp& bsp) {
     for (int x = 0; x < bufW; ++x) {
         yTop[x] = 0;
         yBot[x] = bufH - 1;
     }
     for (auto& vp : visplanes) vp.reset();
 
-    int playerSector = findSector(player.pos, bspRoot);
-    const Sector& sec = sectors[playerSector];
+    int playerSector = bsp.findSector(player.pos);
+    const Sector& sec = level.sector(playerSector);
     double halfW = bufW / 2.0;
     double halfH = bufH / 2.0;
     double horizon = halfH;
@@ -72,13 +73,13 @@ void Renderer::render(const Player& player, const BSPNode& bspRoot) {
     if (slowMode) {
         // Buffered traversal so we can stop after `slowStep` columns.
         std::vector<Seg> segs;
-        traverseBSP(bspRoot, player.pos, [&](const Seg& s) { segs.push_back(s); });
+        bsp.traverse(player.pos, [&](const Seg& s) { segs.push_back(s); });
         slowColumnBudget = slowStep;
         for (const auto& s : segs) drawOne(s);
         if (slowColumnBudget > 0) slowStep = 0;
         else                      slowStep += 1;
     } else {
-        traverseBSP(bspRoot, player.pos, drawOne);
+        bsp.traverse(player.pos, drawOne);
     }
 
     renderVisplanes(focal, halfW, horizon, player.pos, cosA, sinA, eyeZ);
@@ -228,17 +229,17 @@ void Renderer::drawSeg(const Seg& seg, const Player& player,
 
     // Wall heights are stored as world Z; what matters for projection is the
     // signed distance from the eye, so we precompute (sectorZ - eyeZ).
-    const Sector& front = sectors[seg.frontSector];
+    const Sector& front = level.sector(seg.frontSector);
     double fCeil  = front.ceilH  - eyeZ;
     double fFloor = front.floorH - eyeZ;
     double bCeil = 0, bFloor = 0;
     if (seg.backSector != noSector) {
-        const Sector& back = sectors[seg.backSector];
+        const Sector& back = level.sector(seg.backSector);
         bCeil  = back.ceilH  - eyeZ;
         bFloor = back.floorH - eyeZ;
     }
 
-    const LineDef& lineDef = linedefs[seg.lineDefIndex];
+    const LineDef& lineDef = level.linedefs()[seg.lineDefIndex];
     double frontLight = front.light;
 
     // Perspective-correct interpolation: linear in 1/d across screen X, not
@@ -327,15 +328,15 @@ void Renderer::renderVisplanes(double focal, double halfW, double horizon,
                                Vec2 playerPos, double cosA, double sinA,
                                double eyeZ) {
     for (auto& plane : visplanes) {
-        if (plane.maxX < plane.minX) continue;
-        const Sector& sec = sectors[plane.sectorIndex];
-        double planeZ = plane.isCeiling ? sec.ceilH : sec.floorH;
-        RGBA color    = plane.isCeiling ? sec.ceilColor : sec.floorColor;
+        if (plane.maxX() < plane.minX()) continue;
+        const Sector& sec = level.sector(plane.sectorIndex());
+        double planeZ = plane.isCeiling() ? sec.ceilH : sec.floorH;
+        RGBA color    = plane.isCeiling() ? sec.ceilColor : sec.floorColor;
         double planeHeight = planeZ - eyeZ; // signed
 
-        for (int x = plane.minX; x <= plane.maxX; ++x) {
-            int yLo = plane.top[x];
-            int yHi = plane.bot[x];
+        for (int x = plane.minX(); x <= plane.maxX(); ++x) {
+            int yLo = plane.top(x);
+            int yHi = plane.bot(x);
             if (yLo > yHi) continue;
             fillPlaneColumn(x, yLo, yHi,
                             planeHeight, focal, halfW, horizon,
@@ -435,7 +436,7 @@ void Renderer::drawMinimap(const Player& player) {
     double minY =  std::numeric_limits<double>::infinity();
     double maxX = -std::numeric_limits<double>::infinity();
     double maxY = -std::numeric_limits<double>::infinity();
-    for (const auto& v : vertices) {
+    for (const auto& v : level.vertices()) {
         if (v.x < minX) minX = v.x;
         if (v.y < minY) minY = v.y;
         if (v.x > maxX) maxX = v.x;
@@ -465,9 +466,9 @@ void Renderer::drawMinimap(const Player& player) {
     }
 
     // Linedefs — two-sided in gray, one-sided in their wall color.
-    for (const auto& l : linedefs) {
-        auto [ax, ay] = project(vertices[l.v1]);
-        auto [bx, by] = project(vertices[l.v2]);
+    for (const auto& l : level.linedefs()) {
+        auto [ax, ay] = project(level.vertex(l.v1));
+        auto [bx, by] = project(level.vertex(l.v2));
         RGBA col = (l.backSector == noSector) ? l.wallColor : RGBA{120, 120, 120, 255};
         drawLine(ax, ay, bx, by, col);
     }

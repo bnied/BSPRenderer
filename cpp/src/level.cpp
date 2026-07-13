@@ -19,7 +19,9 @@
 
 #include "level.hpp"
 
-const std::vector<Vec2> vertices = {
+namespace {
+
+const std::vector<Vec2> kVertices = {
     // Hub perimeter
     {  0,    0},  //  0 hub NW
     { 80,    0},  //  1 hub N opening west (catwalk entry)
@@ -92,7 +94,7 @@ namespace {
     constexpr RGBA alcoveWall   = {220, 140, 190, 255}; // magenta
 }
 
-const std::vector<Sector> sectors = {
+const std::vector<Sector> kSectors = {
     // 0: Hub.
     {  0,  80, { 82,  76,  60, 255}, { 50,  56,  70, 255}, 0.85},
     // 1: Vestigial (was pillar interior; one-sided pillar walls don't reference it now).
@@ -120,7 +122,7 @@ const std::vector<Sector> sectors = {
     { 30, 110, {210, 130, 180, 255}, {160,  80, 130, 255}, 0.85},
 };
 
-const std::vector<LineDef> linedefs = {
+const std::vector<LineDef> kLinedefs = {
     // ---- Hub perimeter (front = 0) ----
     {0, 1, 0, noSector, mainWall, mainUpper, mainLower},
     {1, 2, 0, 2,        mainWall, mainUpper, catwalkWall}, // → catwalk
@@ -193,3 +195,33 @@ const std::vector<LineDef> linedefs = {
     {36, 37, 11, noSector, alcoveWall, alcoveWall, alcoveWall}, // E
     {37, 35, 11, noSector, alcoveWall, alcoveWall, alcoveWall}, // S
 };
+
+} // namespace
+
+Level::Level(std::vector<Vec2> vertices, std::vector<Sector> sectors,
+             std::vector<LineDef> linedefs)
+    : vertices_(std::move(vertices)),
+      sectors_(std::move(sectors)),
+      linedefs_(std::move(linedefs)) {}
+
+const Level& Level::showcase() {
+    static const Level level(kVertices, kSectors, kLinedefs);
+    return level;
+}
+
+std::vector<Seg> Level::generateSegs() const {
+    std::vector<Seg> out;
+    out.reserve(linedefs_.size() * 2);
+    for (int i = 0; i < static_cast<int>(linedefs_.size()); ++i) {
+        const LineDef& l = linedefs_[i];
+        Vec2 a = vertices_[l.v1];
+        Vec2 b = vertices_[l.v2];
+        // Authored direction (front side).
+        out.push_back(Seg{a, b, l.frontSector, l.backSector, i});
+        // Reverse direction (back side) for two-sided linedefs.
+        if (l.backSector != noSector) {
+            out.push_back(Seg{b, a, l.backSector, l.frontSector, i});
+        }
+    }
+    return out;
+}

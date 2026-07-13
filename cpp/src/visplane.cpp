@@ -2,27 +2,27 @@
 
 #include <climits>
 
-Visplane::Visplane(int sectorIndex_, bool isCeiling_, int width)
-    : sectorIndex(sectorIndex_),
-      isCeiling(isCeiling_),
-      top(width),
-      bot(width) {
+Visplane::Visplane(int sectorIndex, bool isCeiling, int width)
+    : sectorIndex_(sectorIndex),
+      isCeiling_(isCeiling),
+      top_(width),
+      bot_(width) {
     reset();
 }
 
 void Visplane::reset() {
-    for (size_t i = 0; i < top.size(); ++i) {
-        top[i] = INT_MAX;
-        bot[i] = INT_MIN;
+    for (size_t i = 0; i < top_.size(); ++i) {
+        top_[i] = INT_MAX;
+        bot_[i] = INT_MIN;
     }
-    minX = static_cast<int>(top.size());
-    maxX = -1;
+    minX_ = static_cast<int>(top_.size());
+    maxX_ = -1;
 }
 
 void Visplane::extend(int x, int yLo, int yHi) {
     if (yLo > yHi) return;
-    if (yLo < top[x]) top[x] = yLo;
-    if (yHi > bot[x]) bot[x] = yHi;
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
+    if (yLo < top_[x]) top_[x] = yLo;
+    if (yHi > bot_[x]) bot_[x] = yHi;
+    if (x < minX_) minX_ = x;
+    if (x > maxX_) maxX_ = x;
 }

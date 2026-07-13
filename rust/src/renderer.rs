@@ -21,10 +21,10 @@
 //! visplanes, overlays). Rust prefers all methods on a single `impl` block,
 //! so it all lives here — see the section banners.
 
-use crate::bsp::{find_sector, traverse_bsp, BspNode};
+use crate::bsp::Bsp;
 use crate::font::{glyph, ADVANCE, GLYPH_H, GLYPH_W};
 use crate::geometry::{Seg, NO_SECTOR};
-use crate::level::{LINEDEFS, SECTORS, VERTICES};
+use crate::level::Level;
 use crate::math_utils::{clamp_f, shade, Rgba, Vec2};
 use crate::player::Player;
 use crate::visplane::Visplane;
@@ -59,9 +59,9 @@ struct FrameCtx {
 }
 
 impl Renderer {
-    pub fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: usize, height: usize, level: &Level) -> Self {
         let mut visplanes: Vec<Visplane> = Vec::new();
-        for si in 0..SECTORS.len() {
+        for si in 0..level.sectors.len() {
             visplanes.push(Visplane::new(si, false, width)); // floor at 2*si
             visplanes.push(Visplane::new(si, true, width));  // ceiling at 2*si+1
         }
@@ -89,7 +89,7 @@ impl Renderer {
     ///   4. Visplane pass → flat floors/ceilings rasterized with inverse
     ///      projection + checkerboard texture.
     ///   5. Overlays: minimap and crosshair.
-    pub fn render(&mut self, p: &Player, bsp_root: &BspNode) {
+    pub fn render(&mut self, p: &Player, level: &Level, bsp: &Bsp) {
         for x in 0..self.buf_w {
             self.y_top[x] = 0;
             self.y_bot[x] = self.buf_h as i32 - 1;
@@ -98,8 +98,8 @@ impl Renderer {
             v.reset();
         }
 
-        let player_sector = find_sector(p.pos, bsp_root);
-        let sec = SECTORS[player_sector];
+        let player_sector = bsp.find_sector(p.pos);
+        let sec = *level.sector(player_sector);
         let half_w = self.buf_w as f64 / 2.0;
         let half_h = self.buf_h as f64 / 2.0;
         let horizon = half_h;
@@ -141,12 +141,12 @@ impl Renderer {
         // Take ownership of the buffer so the closure can borrow it without
         // clashing with `self` later — we put it back at the end.
         let mut segs = std::mem::take(&mut self.frame_segs);
-        traverse_bsp(bsp_root, p.pos, &mut |s: &Seg| segs.push(*s));
+        bsp.traverse(p.pos, &mut |s: &Seg| segs.push(*s));
 
         if self.slow_mode {
             self.slow_column_budget = self.slow_step;
             for s in &segs {
-                self.draw_seg(s, &ctx);
+                self.draw_seg(s, &ctx, level);
                 if self.slow_column_budget <= 0 {
                     break;
                 }
@@ -158,13 +158,13 @@ impl Renderer {
             }
         } else {
             for s in &segs {
-                self.draw_seg(s, &ctx);
+                self.draw_seg(s, &ctx, level);
             }
         }
         self.frame_segs = segs;
 
-        self.render_visplanes(&ctx);
-        self.draw_minimap(p);
+        self.render_visplanes(&ctx, level);
+        self.draw_minimap(p, level);
         self.draw_crosshair();
     }
 
@@ -220,7 +220,7 @@ impl Renderer {
     ///           occluded.
     ///        f. If portal: optionally draw upper/lower wall slivers, then
     ///           narrow yTop/yBot to the back sector's open range.
-    fn draw_seg(&mut self, seg: &Seg, ctx: &FrameCtx) {
+    fn draw_seg(&mut self, seg: &Seg, ctx: &FrameCtx, level: &Level) {
         // Back-face cull. Outward normal is (-sdy, sdx). If the player is on
         // the wrong side of that normal, this seg's "front" faces away.
         let sdx = seg.v2.x - seg.v1.x;
@@ -309,17 +309,17 @@ impl Renderer {
             return;
         }
 
-        let front = SECTORS[seg.front_sector];
+        let front = *level.sector(seg.front_sector);
         let f_ceil = front.ceil_h - ctx.eye_z;
         let f_floor = front.floor_h - ctx.eye_z;
         let (b_ceil, b_floor) = if seg.back_sector != NO_SECTOR {
-            let back = SECTORS[seg.back_sector as usize];
+            let back = level.sector(seg.back_sector as usize);
             (back.ceil_h - ctx.eye_z, back.floor_h - ctx.eye_z)
         } else {
             (0.0, 0.0)
         };
 
-        let line_def = LINEDEFS[seg.linedef_index];
+        let line_def = level.linedefs[seg.linedef_index];
         let front_light = front.light;
 
         let inv_d1 = 1.0 / d1;
@@ -440,19 +440,19 @@ impl Renderer {
 
     // ---- Visplane pass (formerly renderer_visplanes.go + renderer_fill.go) ----
 
-    fn render_visplanes(&mut self, ctx: &FrameCtx) {
+    fn render_visplanes(&mut self, ctx: &FrameCtx, level: &Level) {
         // Snapshot the (sector_index, is_ceiling, min_x, max_x) before iter
         // since fill_plane_column needs &mut self.pixels; we read top/bot via
         // index into self.visplanes.
         for pi in 0..self.visplanes.len() {
             let (sector_index, is_ceiling, min_x, max_x) = {
                 let p = &self.visplanes[pi];
-                (p.sector_index, p.is_ceiling, p.min_x, p.max_x)
+                let Some((min_x, max_x)) = p.covered() else {
+                    continue;
+                };
+                (p.sector_index(), p.is_ceiling(), min_x, max_x)
             };
-            if max_x < min_x {
-                continue;
-            }
-            let sec = SECTORS[sector_index];
+            let sec = *level.sector(sector_index);
             let (plane_z, color) = if is_ceiling {
                 (sec.ceil_h, sec.ceil_color)
             } else {
@@ -461,10 +461,7 @@ impl Renderer {
             let plane_height = plane_z - ctx.eye_z;
 
             for x in min_x..=max_x {
-                let (y_lo, y_hi) = {
-                    let p = &self.visplanes[pi];
-                    (p.top[x as usize], p.bot[x as usize])
-                };
+                let (y_lo, y_hi) = self.visplanes[pi].span_at(x as usize);
                 if y_lo > y_hi {
                     continue;
                 }
@@ -551,12 +548,12 @@ impl Renderer {
         }
     }
 
-    fn draw_minimap(&mut self, p: &Player) {
+    fn draw_minimap(&mut self, p: &Player, level: &Level) {
         let mut min_x = f64::INFINITY;
         let mut min_y = f64::INFINITY;
         let mut max_x = f64::NEG_INFINITY;
         let mut max_y = f64::NEG_INFINITY;
-        for v in VERTICES.iter() {
+        for v in level.vertices.iter() {
             if v.x < min_x { min_x = v.x; }
             if v.y < min_y { min_y = v.y; }
             if v.x > max_x { max_x = v.x; }
@@ -591,9 +588,9 @@ impl Renderer {
         }
 
         // Linedefs.
-        for l in LINEDEFS.iter() {
-            let (ax, ay) = project(VERTICES[l.v1]);
-            let (bx, by) = project(VERTICES[l.v2]);
+        for l in level.linedefs.iter() {
+            let (ax, ay) = project(level.vertices[l.v1]);
+            let (bx, by) = project(level.vertices[l.v2]);
             let col = if l.back_sector != NO_SECTOR {
                 Rgba::new(120, 120, 120, 255)
             } else {
@@ -686,9 +683,9 @@ impl Renderer {
     /// Draw the standard HUD line at the top-left (sector + heights + a
     /// `[SLOW]` tag when slow mode is active). Uppercased to match the
     /// authored bitmap-font character set.
-    pub fn draw_hud(&mut self, p: &Player, bsp_root: &BspNode) {
-        let si = find_sector(p.pos, bsp_root);
-        let s = SECTORS[si];
+    pub fn draw_hud(&mut self, p: &Player, level: &Level, bsp: &Bsp) {
+        let si = bsp.find_sector(p.pos);
+        let s = *level.sector(si);
         let slow_tag = if self.slow_mode { "  [SLOW]" } else { "" };
         let hud = format!(
             "SECTOR {}  FLOOR {:+}  CEIL {:+}  FEETZ {:+}  EYEZ {:+}{}",

@@ -11,7 +11,7 @@
 //!      once at startup by recursively choosing a partition seg that keeps
 //!      both subspaces populated and minimizes straddle splits.
 //!
-//!   3. Per-frame BSP traversal ([`bsp::traverse_bsp`]) — front-to-back walk
+//!   3. Per-frame BSP traversal ([`bsp::Bsp::traverse`]) — front-to-back walk
 //!      from the player's side, handing each seg to the renderer.
 //!
 //!   4. Per-seg rasterization ([`renderer::Renderer::render`]) — back-face
@@ -48,7 +48,8 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
-use crate::bsp::{build_bsp, generate_segs, BspNode};
+use crate::bsp::Bsp;
+use crate::level::Level;
 use crate::player::{Input, Player};
 use crate::renderer::Renderer;
 
@@ -71,19 +72,26 @@ struct App {
     window: Option<Arc<Window>>,
     player: Player,
     renderer: Renderer,
-    bsp_root: Box<BspNode>,
+    level: Level,
+    bsp: Bsp,
     input: Input,
     last: Instant,
 }
 
 impl App {
     fn new() -> Self {
+        // The map is built once and owned here, then threaded as `&Level` into
+        // the BSP builder, the player, and the renderer. No global world state.
+        let level = Level::showcase();
+        let bsp = Bsp::build(&level);
+        let renderer = Renderer::new(INTERNAL_W as usize, INTERNAL_H as usize, &level);
         Self {
             pixels: None,
             window: None,
             player: Player::new(),
-            renderer: Renderer::new(INTERNAL_W as usize, INTERNAL_H as usize),
-            bsp_root: build_bsp(generate_segs()),
+            renderer,
+            level,
+            bsp,
             input: Input::default(),
             last: Instant::now(),
         }
@@ -172,9 +180,9 @@ impl ApplicationHandler for App {
                 }
                 self.last = now;
 
-                self.player.update(dt, self.input, &self.bsp_root);
-                self.renderer.render(&self.player, &self.bsp_root);
-                self.renderer.draw_hud(&self.player, &self.bsp_root);
+                self.player.update(dt, self.input, &self.level, &self.bsp);
+                self.renderer.render(&self.player, &self.level, &self.bsp);
+                self.renderer.draw_hud(&self.player, &self.level, &self.bsp);
 
                 if let Some(p) = &mut self.pixels {
                     p.frame_mut().copy_from_slice(&self.renderer.pixels);

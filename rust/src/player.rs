@@ -10,9 +10,9 @@
 
 use std::f64::consts::PI;
 
-use crate::bsp::{find_sector, BspNode};
+use crate::bsp::Bsp;
 use crate::geometry::NO_SECTOR;
-use crate::level::{LINEDEFS, SECTORS, VERTICES};
+use crate::level::Level;
 use crate::math_utils::{clamp_f, Vec2};
 
 /// Per-tick boolean key state. The main loop fills this in from winit
@@ -88,7 +88,7 @@ impl Player {
     /// Advance by `dt` seconds of simulation time. Movement is axis-separated
     /// and probed against all solid linedefs so the player can slide along
     /// walls instead of getting stuck on them.
-    pub fn update(&mut self, dt: f64, input: Input, bsp_root: &BspNode) {
+    pub fn update(&mut self, dt: f64, input: Input, level: &Level, bsp: &Bsp) {
         let rot = self.rot_speed * dt;
         let mv = self.move_speed * dt;
 
@@ -124,37 +124,37 @@ impl Player {
         }
 
         let radius = 8.0;
-        let current_floor_h = SECTORS[find_sector(self.pos, bsp_root)].floor_h;
+        let current_floor_h = level.sector(bsp.find_sector(self.pos)).floor_h;
 
         let try_x = Vec2::new(self.pos.x + dx, self.pos.y);
-        if !self.collides(try_x, radius, current_floor_h) {
+        if !self.collides(try_x, radius, current_floor_h, level) {
             self.pos = try_x;
         }
         let try_y = Vec2::new(self.pos.x, self.pos.y + dy);
-        if !self.collides(try_y, radius, current_floor_h) {
+        if !self.collides(try_y, radius, current_floor_h, level) {
             self.pos = try_y;
         }
 
         // Snap feet to the new sector's floor (no gravity / falling).
-        self.feet_z = SECTORS[find_sector(self.pos, bsp_root)].floor_h;
+        self.feet_z = level.sector(bsp.find_sector(self.pos)).floor_h;
     }
 
     /// A linedef blocks movement if it's one-sided, OR a portal whose
     /// opening is too short, OR the back-side floor is more than
     /// `MAX_STEP_UP` above the side we're standing on.
-    fn collides(&self, pos: Vec2, radius: f64, current_floor_h: f64) -> bool {
+    fn collides(&self, pos: Vec2, radius: f64, current_floor_h: f64, level: &Level) -> bool {
         const MAX_STEP_UP: f64 = 24.0;
-        for l in LINEDEFS.iter() {
-            let a = VERTICES[l.v1];
-            let b = VERTICES[l.v2];
+        for l in level.linedefs.iter() {
+            let a = level.vertices[l.v1];
+            let b = level.vertices[l.v2];
             if point_segment_distance(pos, a, b) >= radius {
                 continue;
             }
             if l.back_sector == NO_SECTOR {
                 return true;
             }
-            let front = SECTORS[l.front_sector];
-            let back = SECTORS[l.back_sector as usize];
+            let front = level.sector(l.front_sector);
+            let back = level.sector(l.back_sector as usize);
 
             // Portal opening must be tall enough to fit through.
             let opening_top = front.ceil_h.min(back.ceil_h);

@@ -6,15 +6,42 @@
 //! convex bag of segs that all live in a single sector. The point of the BSP
 //! at render time is twofold:
 //!
-//!   1. [`find_sector`] descends the tree once and returns the leaf sector the
-//!      player is currently standing in — O(depth), no per-tick search.
-//!   2. [`traverse_bsp`] yields segs front-to-back, which lets the per-column
+//!   1. [`Bsp::find_sector`] descends the tree once and returns the leaf sector
+//!      the player is currently standing in — O(depth), no per-tick search.
+//!   2. [`Bsp::traverse`] yields segs front-to-back, which lets the per-column
 //!      clip arrays (yTop/yBot) terminate occluded columns without ever
 //!      needing a depth buffer.
 
-use crate::geometry::{Seg, NO_SECTOR};
-use crate::level::{LINEDEFS, VERTICES};
+use crate::geometry::Seg;
+use crate::level::Level;
 use crate::math_utils::Vec2;
+
+/// The BSP tree, wrapped so callers only touch the two query methods. The node
+/// enum ([`BspNode`]) stays a clean leaf/branch variant; `Bsp` just owns the
+/// root and hangs the queries off it.
+pub struct Bsp {
+    root: Box<BspNode>,
+}
+
+impl Bsp {
+    /// Build a BSP over the level's segs. Runs once at startup.
+    pub fn build(level: &Level) -> Self {
+        Bsp {
+            root: build_bsp(level.generate_segs()),
+        }
+    }
+
+    /// Descend to the leaf containing `pos` and return its sector index.
+    pub fn find_sector(&self, pos: Vec2) -> usize {
+        find_sector(pos, &self.root)
+    }
+
+    /// Walk the tree front-to-back from the player's position and invoke
+    /// `visit` on every seg in order.
+    pub fn traverse(&self, player: Vec2, visit: &mut impl FnMut(&Seg)) {
+        traverse_bsp(&self.root, player, visit);
+    }
+}
 
 /// Either a leaf (segs + sector) or an internal node (partition line +
 /// left/right children).
@@ -44,7 +71,7 @@ enum SegSide {
 /// Signed perp-product of (p - p_start) against p_delta.
 /// Positive → p is to the LEFT of the directed partition,
 /// negative → p is to the RIGHT, zero → on the line.
-pub fn side_of(p: Vec2, p_start: Vec2, p_delta: Vec2) -> f64 {
+fn side_of(p: Vec2, p_start: Vec2, p_delta: Vec2) -> f64 {
     p_delta.x * (p.y - p_start.y) - p_delta.y * (p.x - p_start.x)
 }
 
@@ -79,43 +106,6 @@ fn classify(seg: &Seg, part_start: Vec2, part_delta: Vec2) -> (SegSide, Vec2) {
     (SegSide::Straddle, Vec2::new(ix, iy))
 }
 
-/// Flatten the linedef list into the seg list that the BSP builder will
-/// consume.
-///
-/// One-sided linedefs produce ONE seg in their authored direction (front
-/// side only, because the back is solid and never visible).
-///
-/// Two-sided linedefs produce TWO segs — the second runs in reverse and has
-/// its front/back sectors swapped. The BSP needs both because each side of a
-/// portal will be rasterized from its own sector during traversal, with its
-/// own ceiling/floor heights and per-sector light.
-pub fn generate_segs() -> Vec<Seg> {
-    let mut out = Vec::with_capacity(LINEDEFS.len() * 2);
-    for (i, l) in LINEDEFS.iter().enumerate() {
-        let a = VERTICES[l.v1];
-        let b = VERTICES[l.v2];
-        // Authored direction (front side).
-        out.push(Seg {
-            v1: a,
-            v2: b,
-            front_sector: l.front_sector,
-            back_sector: l.back_sector,
-            linedef_index: i,
-        });
-        // Reverse direction (back side) for two-sided linedefs.
-        if l.back_sector != NO_SECTOR {
-            out.push(Seg {
-                v1: b,
-                v2: a,
-                front_sector: l.back_sector as usize,
-                back_sector: l.front_sector as i32,
-                linedef_index: i,
-            });
-        }
-    }
-    out
-}
-
 /// Construct a BSP tree from a flat list of segs. Runs once at startup.
 ///
 /// Recursion ends in two ways:
@@ -127,7 +117,7 @@ pub fn generate_segs() -> Vec<Seg> {
 /// Partition selection is greedy: try every seg as a candidate, score by
 /// imbalance plus a 2× weight on straddle splits, and pick the lowest.
 /// Small-map quality, deterministic, clean trees on the test map.
-pub fn build_bsp(segs: Vec<Seg>) -> Box<BspNode> {
+fn build_bsp(segs: Vec<Seg>) -> Box<BspNode> {
     if segs.len() <= 1 {
         let sector = if segs.is_empty() { 0 } else { segs[0].front_sector };
         return Box::new(BspNode::Leaf { segs, sector });
@@ -222,7 +212,7 @@ pub fn build_bsp(segs: Vec<Seg>) -> Box<BspNode> {
 
 /// Descend the BSP tree to the leaf containing `pos` and return its sector
 /// index.
-pub fn find_sector(pos: Vec2, mut node: &BspNode) -> usize {
+fn find_sector(pos: Vec2, mut node: &BspNode) -> usize {
     loop {
         match node {
             BspNode::Leaf { sector, .. } => return *sector,
@@ -241,7 +231,7 @@ pub fn find_sector(pos: Vec2, mut node: &BspNode) -> usize {
 /// on every seg in order. Going front-first is what makes the per-column
 /// clip arrays act as a no-op depth buffer — by the time we reach a far-away
 /// seg, columns it would have covered are already closed off.
-pub fn traverse_bsp<F: FnMut(&Seg)>(node: &BspNode, player: Vec2, visit: &mut F) {
+fn traverse_bsp<F: FnMut(&Seg)>(node: &BspNode, player: Vec2, visit: &mut F) {
     match node {
         BspNode::Leaf { segs, .. } => {
             for s in segs {

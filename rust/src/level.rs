@@ -17,10 +17,78 @@
 //!  10  overlook     floor  70, ceil 130, bright cool  — top of staircase
 //!  11  alcove       floor  30, ceil 110, magenta      — east of arena
 
-use crate::geometry::{LineDef, Sector, NO_SECTOR};
+use crate::geometry::{LineDef, Sector, Seg, NO_SECTOR};
 use crate::math_utils::{Rgba, Vec2};
 
-pub static VERTICES: [Vec2; 42] = [
+/// The map, as an owned object instead of three loose module-level statics.
+///
+/// A `Level` owns the hand-authored geometry (vertices, sectors, linedefs) and
+/// knows how to flatten its linedefs into the renderable seg list the BSP
+/// consumes. Passing a `&Level` into the BSP builder, the [`crate::player::Player`],
+/// and the [`crate::renderer::Renderer`] makes the map dependency explicit and
+/// keeps the world out of global state — there is no reason two `Level`s
+/// couldn't coexist.
+pub struct Level {
+    pub vertices: Vec<Vec2>,
+    pub sectors: Vec<Sector>,
+    pub linedefs: Vec<LineDef>,
+}
+
+impl Level {
+    /// The single hand-authored showcase map. See the module-level doc comment
+    /// for the sector table.
+    pub fn showcase() -> Self {
+        Self {
+            vertices: VERTICES.to_vec(),
+            sectors: SECTORS.to_vec(),
+            linedefs: LINEDEFS.to_vec(),
+        }
+    }
+
+    /// Borrow sector `i`.
+    pub fn sector(&self, i: usize) -> &Sector {
+        &self.sectors[i]
+    }
+
+    /// Flatten the linedef list into the seg list that the BSP builder will
+    /// consume.
+    ///
+    /// One-sided linedefs produce ONE seg in their authored direction (front
+    /// side only, because the back is solid and never visible).
+    ///
+    /// Two-sided linedefs produce TWO segs — the second runs in reverse and has
+    /// its front/back sectors swapped. The BSP needs both because each side of a
+    /// portal will be rasterized from its own sector during traversal, with its
+    /// own ceiling/floor heights and per-sector light.
+    pub fn generate_segs(&self) -> Vec<Seg> {
+        let mut out = Vec::with_capacity(self.linedefs.len() * 2);
+        for (i, l) in self.linedefs.iter().enumerate() {
+            let a = self.vertices[l.v1];
+            let b = self.vertices[l.v2];
+            // Authored direction (front side).
+            out.push(Seg {
+                v1: a,
+                v2: b,
+                front_sector: l.front_sector,
+                back_sector: l.back_sector,
+                linedef_index: i,
+            });
+            // Reverse direction (back side) for two-sided linedefs.
+            if l.back_sector != NO_SECTOR {
+                out.push(Seg {
+                    v1: b,
+                    v2: a,
+                    front_sector: l.back_sector as usize,
+                    back_sector: l.front_sector as i32,
+                    linedef_index: i,
+                });
+            }
+        }
+        out
+    }
+}
+
+static VERTICES: [Vec2; 42] = [
     // Hub perimeter
     Vec2::new(0.0, 0.0),       //  0  hub NW
     Vec2::new(80.0, 0.0),      //  1  hub N opening west (catwalk entry)
@@ -91,7 +159,7 @@ const STAIR4_WALL: Rgba = Rgba::new(90, 190, 220, 255);
 const OVERLOOK_WALL: Rgba = Rgba::new(210, 220, 235, 255);
 const ALCOVE_WALL: Rgba = Rgba::new(220, 140, 190, 255);
 
-pub static SECTORS: [Sector; 12] = [
+static SECTORS: [Sector; 12] = [
     // 0: Hub.
     Sector { floor_h: 0.0, ceil_h: 80.0,
              floor_color: Rgba::new(82, 76, 60, 255),
@@ -167,7 +235,7 @@ const fn ld(v1: usize, v2: usize, front: usize, back: i32, w: Rgba, u: Rgba, l: 
     }
 }
 
-pub static LINEDEFS: [LineDef; 52] = [
+static LINEDEFS: [LineDef; 52] = [
     // ---- Hub perimeter (front = 0) ----
     ld(0, 1, 0, NO_SECTOR, MAIN_WALL, MAIN_UPPER, MAIN_LOWER),
     ld(1, 2, 0, 2, MAIN_WALL, MAIN_UPPER, CATWALK_WALL),

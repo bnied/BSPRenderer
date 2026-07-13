@@ -42,6 +42,7 @@ struct Visplane {
 }
 
 final class Renderer {
+    let level: Level
     let bufW: Int
     let bufH: Int
     var pixels: [UInt8]
@@ -53,15 +54,16 @@ final class Renderer {
     private var slowStep = 0          // columns revealed so far in the current cycle
     private var slowColumnBudget = 0  // columns drawSeg may still emit this frame
 
-    init(width: Int, height: Int) {
+    init(level: Level, width: Int, height: Int) {
+        self.level = level
         self.bufW = width
         self.bufH = height
         self.pixels = [UInt8](repeating: 0, count: width * height * 4)
         self.yTop = [Int](repeating: 0, count: width)
         self.yBot = [Int](repeating: height - 1, count: width)
         var planes: [Visplane] = []
-        planes.reserveCapacity(sectors.count * 2)
-        for si in 0 ..< sectors.count {
+        planes.reserveCapacity(level.sectors.count * 2)
+        for si in 0 ..< level.sectors.count {
             planes.append(Visplane(sectorIndex: si, isCeiling: false, width: width))
             planes.append(Visplane(sectorIndex: si, isCeiling: true, width: width))
         }
@@ -70,7 +72,7 @@ final class Renderer {
 
     // MARK: frame entry
 
-    func render(player: Player, bspRoot: BSPNode) {
+    func render(player: Player, bsp: Bsp) {
         // Reset per-column open region and per-frame visplane coverage.
         for x in 0 ..< bufW {
             yTop[x] = 0
@@ -79,8 +81,8 @@ final class Renderer {
         for i in 0 ..< visplanes.count {
             visplanes[i].reset()
         }
-        let playerSector = findSector(pos: player.pos, node: bspRoot)
-        let sec = sectors[playerSector]
+        let playerSector = bsp.findSector(player.pos)
+        let sec = level.sectors[playerSector]
         let halfW = Double(bufW) / 2.0
         let halfH = Double(bufH) / 2.0
         let horizon = halfH
@@ -116,13 +118,13 @@ final class Renderer {
 
         if slowMode {
             var segs: [Seg] = []
-            traverseBSP(bspRoot, player: player.pos) { segs.append($0) }
+            bsp.traverse(from: player.pos) { segs.append($0) }
             slowColumnBudget = slowStep
             for seg in segs { drawOne(seg) }
             // If budget wasn't exhausted, we drew everything — loop back to 0.
             slowStep = slowColumnBudget > 0 ? 0 : slowStep + 1
         } else {
-            traverseBSP(bspRoot, player: player.pos, visit: drawOne)
+            bsp.traverse(from: player.pos, drawOne)
         }
 
         renderVisplanes(focal: focal, halfW: halfW, horizon: horizon,
@@ -138,7 +140,7 @@ final class Renderer {
                                  eyeZ: Double) {
         for plane in visplanes {
             if plane.maxX < plane.minX { continue }
-            let sector = sectors[plane.sectorIndex]
+            let sector = level.sectors[plane.sectorIndex]
             let planeZ = plane.isCeiling ? sector.ceilH : sector.floorH
             let planeHeight = planeZ - eyeZ
             let color = plane.isCeiling ? sector.ceilColor : sector.floorColor
@@ -351,17 +353,17 @@ final class Renderer {
         let xEnd = min(bufW - 1, Int(floor(sx2)))
         if xStart > xEnd { return }
 
-        let front = sectors[seg.frontSector]
+        let front = level.sectors[seg.frontSector]
         let fCeil = front.ceilH - eyeZ
         let fFloor = front.floorH - eyeZ
         var bCeil: Double = 0, bFloor: Double = 0
         if let bi = seg.backSector {
-            let back = sectors[bi]
+            let back = level.sectors[bi]
             bCeil = back.ceilH - eyeZ
             bFloor = back.floorH - eyeZ
         }
 
-        let lineDef = linedefs[seg.lineDefIndex]
+        let lineDef = level.linedefs[seg.lineDefIndex]
         let frontLight = front.light
 
         // Perspective-correct interpolation of 1/d across screen X.
@@ -456,7 +458,7 @@ final class Renderer {
         // Auto-fit the map to a fixed minimap box.
         var minX = Double.infinity, minY = Double.infinity
         var maxX = -Double.infinity, maxY = -Double.infinity
-        for v in vertices {
+        for v in level.vertices {
             if v.x < minX { minX = v.x }
             if v.y < minY { minY = v.y }
             if v.x > maxX { maxX = v.x }
@@ -487,9 +489,9 @@ final class Renderer {
         }
 
         // Linedefs — two-sided in gray, one-sided colored.
-        for l in linedefs {
-            let a = project(vertices[l.v1])
-            let b = project(vertices[l.v2])
+        for l in level.linedefs {
+            let a = project(level.vertices[l.v1])
+            let b = project(level.vertices[l.v2])
             let col: RGBA = l.backSector == nil ? l.wallColor : RGBA(r: 120, g: 120, b: 120, a: 255)
             drawLine(x0: a.0, y0: a.1, x1: b.0, y1: b.1, color: col)
         }

@@ -3,16 +3,19 @@ import CoreGraphics
 import QuartzCore
 
 final class GameView: NSView {
+    let level = Level.showcase
     let player = Player()
-    let renderer = Renderer(width: 480, height: 300)
-    let bspRoot: BSPNode
+    let renderer: Renderer
+    let bsp: Bsp
 
     var keys = Set<UInt16>()
     var lastTime = CACurrentMediaTime()
     var timer: Timer?
 
     override init(frame: NSRect) {
-        self.bspRoot = buildBSP(generateSegs())
+        let level = Level.showcase
+        self.renderer = Renderer(level: level, width: 480, height: 300)
+        self.bsp = Bsp(level: level)
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
@@ -49,8 +52,8 @@ final class GameView: NSView {
         let now = CACurrentMediaTime()
         let dt = min(0.05, now - lastTime)
         lastTime = now
-        player.update(dt: dt, keys: keys, bspRoot: bspRoot)
-        renderer.render(player: player, bspRoot: bspRoot)
+        player.update(dt: dt, keys: keys, level: level, bsp: bsp)
+        renderer.render(player: player, bsp: bsp)
         setNeedsDisplay(bounds)
     }
 
@@ -61,8 +64,8 @@ final class GameView: NSView {
     }
 
     private func drawHUD() {
-        let si = findSector(pos: player.pos, node: bspRoot)
-        let s = sectors[si]
+        let si = bsp.findSector(player.pos)
+        let s = level.sectors[si]
         let slowTag = renderer.slowMode ? "   [SLOW]" : ""
         let text = String(
             format: "sector %d   floor %+d   ceil %+d   feetZ %+d   eyeZ %+d\(slowTag)",

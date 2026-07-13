@@ -13,12 +13,12 @@ enum SegSide {
 }
 
 @inline(__always)
-func sideOf(_ p: Vec2, pStart: Vec2, pDelta: Vec2) -> Double {
+private func sideOf(_ p: Vec2, pStart: Vec2, pDelta: Vec2) -> Double {
     // Positive → point is on the left of the directed partition line.
     pDelta.x * (p.y - pStart.y) - pDelta.y * (p.x - pStart.x)
 }
 
-func classify(seg: Seg, partStart: Vec2, partDelta: Vec2) -> SegSide {
+private func classify(seg: Seg, partStart: Vec2, partDelta: Vec2) -> SegSide {
     let eps = 1e-4
     let d1 = sideOf(seg.v1, pStart: partStart, pDelta: partDelta)
     let d2 = sideOf(seg.v2, pStart: partStart, pDelta: partDelta)
@@ -33,7 +33,7 @@ func classify(seg: Seg, partStart: Vec2, partDelta: Vec2) -> SegSide {
     return .straddle(Vec2(x: ix, y: iy))
 }
 
-func buildBSP(_ segs: [Seg]) -> BSPNode {
+private func buildBSP(_ segs: [Seg]) -> BSPNode {
     guard segs.count > 1 else {
         return .leaf(segs: segs, sector: segs.first?.frontSector ?? 0)
     }
@@ -99,42 +99,56 @@ func buildBSP(_ segs: [Seg]) -> BSPNode {
     )
 }
 
-func generateSegs() -> [Seg] {
-    var out: [Seg] = []
-    for (i, l) in linedefs.enumerated() {
-        let a = vertices[l.v1]
-        let b = vertices[l.v2]
-        out.append(Seg(v1: a, v2: b, frontSector: l.frontSector, backSector: l.backSector, lineDefIndex: i))
-        if let back = l.backSector {
-            out.append(Seg(v1: b, v2: a, frontSector: back, backSector: l.frontSector, lineDefIndex: i))
+// ============================================================
+// MARK: - Bsp
+//
+// A Bsp wraps the immutable partition tree built from a Level's segs. The node
+// representation (the `BSPNode` indirect enum) is already idiomatic, so the
+// struct just owns the root and exposes the two query methods callers need:
+// findSector (descend to the leaf under a point) and traverse (walk segs
+// front-to-back from the player's position).
+struct Bsp {
+    let root: BSPNode
+
+    init(level: Level) {
+        self.root = buildBSP(level.generateSegs())
+    }
+
+    // findSector descends to the leaf containing `p` and returns its sector.
+    func findSector(_ p: Vec2) -> Int {
+        Self.findSector(p, node: root)
+    }
+
+    // traverse walks the tree front-to-back from `p` and invokes `visit` on
+    // every seg in order.
+    func traverse(from p: Vec2, _ visit: (Seg) -> Void) {
+        Self.traverse(node: root, player: p, visit: visit)
+    }
+
+    private static func findSector(_ p: Vec2, node: BSPNode) -> Int {
+        switch node {
+        case .leaf(_, let sector):
+            return sector
+        case .node(let pStart, let pDelta, let left, let right):
+            return sideOf(p, pStart: pStart, pDelta: pDelta) >= 0
+                ? findSector(p, node: left)
+                : findSector(p, node: right)
         }
     }
-    return out
-}
 
-func findSector(pos: Vec2, node: BSPNode) -> Int {
-    switch node {
-    case .leaf(_, let sector):
-        return sector
-    case .node(let pStart, let pDelta, let left, let right):
-        return sideOf(pos, pStart: pStart, pDelta: pDelta) >= 0
-            ? findSector(pos: pos, node: left)
-            : findSector(pos: pos, node: right)
-    }
-}
-
-func traverseBSP(_ node: BSPNode, player: Vec2, visit: (Seg) -> Void) {
-    switch node {
-    case .leaf(let segs, _):
-        for s in segs { visit(s) }
-    case .node(let pStart, let pDelta, let left, let right):
-        let d = sideOf(player, pStart: pStart, pDelta: pDelta)
-        if d >= 0 {
-            traverseBSP(left, player: player, visit: visit)
-            traverseBSP(right, player: player, visit: visit)
-        } else {
-            traverseBSP(right, player: player, visit: visit)
-            traverseBSP(left, player: player, visit: visit)
+    private static func traverse(node: BSPNode, player: Vec2, visit: (Seg) -> Void) {
+        switch node {
+        case .leaf(let segs, _):
+            for s in segs { visit(s) }
+        case .node(let pStart, let pDelta, let left, let right):
+            let d = sideOf(player, pStart: pStart, pDelta: pDelta)
+            if d >= 0 {
+                traverse(node: left, player: player, visit: visit)
+                traverse(node: right, player: player, visit: visit)
+            } else {
+                traverse(node: right, player: player, visit: visit)
+                traverse(node: left, player: player, visit: visit)
+            }
         }
     }
 }

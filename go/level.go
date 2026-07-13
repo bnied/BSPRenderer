@@ -45,7 +45,35 @@ package main
 // Ceiling rises 2 per step then jumps to 130 in the overlook so the chamber
 // reads as "outdoors" relative to the cramped stair shaft.
 
-var vertices = []Vec2{
+// Level owns the hand-authored geometry (vertices, sectors, linedefs) and
+// knows how to flatten its linedefs into the renderable seg list the BSP
+// consumes. Threading a *Level into the BSP builder, the Player, and the
+// Renderer makes the map dependency explicit and keeps the world out of global
+// state — there is no reason two Levels couldn't coexist.
+type Level struct {
+	vertices []Vec2
+	sectors  []Sector
+	linedefs []LineDef
+}
+
+// sector resolves a sector index into its data. Callers that hold an index
+// (e.g. findSector's result) use this to fetch floor/ceiling heights.
+func (l *Level) sector(i int) Sector { return l.sectors[i] }
+
+// vertex resolves a vertex index into its world-space point.
+func (l *Level) vertex(i int) Vec2 { return l.vertices[i] }
+
+// NewShowcaseLevel returns the single hand-authored showcase map. See the
+// ASCII sketch above for its layout.
+func NewShowcaseLevel() *Level {
+	return &Level{
+		vertices: showcaseVertices,
+		sectors:  showcaseSectors,
+		linedefs: showcaseLinedefs,
+	}
+}
+
+var showcaseVertices = []Vec2{
 	// Hub perimeter (axis aligned, with openings)
 	{0, 0},     // 0  hub NW
 	{80, 0},    // 1  hub N opening west (catwalk entry)
@@ -122,7 +150,7 @@ var (
 	alcoveWall   = RGBA{220, 140, 190, 255} // magenta
 )
 
-var sectors = []Sector{
+var showcaseSectors = []Sector{
 	// 0: Hub — large warm-tan room, baseline floor and ceiling.
 	{floorH: 0, ceilH: 80,
 		floorColor: RGBA{82, 76, 60, 255},
@@ -188,7 +216,7 @@ var sectors = []Sector{
 		light:      0.85},
 }
 
-var linedefs = []LineDef{
+var showcaseLinedefs = []LineDef{
 	// ---- Hub perimeter (front = 0) ----
 	{v1: 0, v2: 1, frontSector: 0, backSector: noSector, wallColor: mainWall, upperColor: mainUpper, lowerColor: mainLower},
 	{v1: 1, v2: 2, frontSector: 0, backSector: 2, wallColor: mainWall, upperColor: mainUpper, lowerColor: catwalkWall}, // → catwalk

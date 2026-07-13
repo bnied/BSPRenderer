@@ -18,6 +18,7 @@ import "math"
 //                   walk emit columns left-to-right (or front-to-back from
 //                   the player's perspective).
 type Renderer struct {
+	level      *Level
 	bufW, bufH int
 	pixels     []uint8
 	yTop, yBot []int
@@ -28,15 +29,16 @@ type Renderer struct {
 	slowColumnBudget int
 }
 
-func NewRenderer(width, height int) *Renderer {
+func NewRenderer(level *Level, width, height int) *Renderer {
 	r := &Renderer{
+		level:  level,
 		bufW:   width,
 		bufH:   height,
 		pixels: make([]uint8, width*height*4),
 		yTop:   make([]int, width),
 		yBot:   make([]int, width),
 	}
-	for si := range sectors {
+	for si := range level.sectors {
 		r.visplanes = append(r.visplanes,
 			NewVisplane(si, false, width), // floor at 2*si
 			NewVisplane(si, true, width))  // ceiling at 2*si+1
@@ -53,7 +55,7 @@ func NewRenderer(width, height int) *Renderer {
 //   4. Visplane pass → flat floors/ceilings rasterized with inverse
 //      projection + checkerboard texture.
 //   5. Overlays: minimap and crosshair.
-func (r *Renderer) Render(p *Player, bspRoot *BSPNode) {
+func (r *Renderer) Render(p *Player, bsp *BSP) {
 	for x := 0; x < r.bufW; x++ {
 		r.yTop[x] = 0
 		r.yBot[x] = r.bufH - 1
@@ -62,8 +64,8 @@ func (r *Renderer) Render(p *Player, bspRoot *BSPNode) {
 		r.visplanes[i].Reset()
 	}
 
-	playerSector := findSector(p.pos, bspRoot)
-	sec := sectors[playerSector]
+	playerSector := bsp.FindSector(p.pos)
+	sec := r.level.sector(playerSector)
 	halfW := float64(r.bufW) / 2.0
 	halfH := float64(r.bufH) / 2.0
 	horizon := halfH
@@ -103,7 +105,7 @@ func (r *Renderer) Render(p *Player, bspRoot *BSPNode) {
 	if r.slowMode {
 		// Buffered traversal so we can stop drawing after `slowStep` columns.
 		var segs []Seg
-		traverseBSP(bspRoot, p.pos, func(s Seg) { segs = append(segs, s) })
+		bsp.Traverse(p.pos, func(s Seg) { segs = append(segs, s) })
 		r.slowColumnBudget = r.slowStep
 		for _, s := range segs {
 			drawOne(s)
@@ -115,7 +117,7 @@ func (r *Renderer) Render(p *Player, bspRoot *BSPNode) {
 			r.slowStep++
 		}
 	} else {
-		traverseBSP(bspRoot, p.pos, drawOne)
+		bsp.Traverse(p.pos, drawOne)
 	}
 
 	r.renderVisplanes(focal, halfW, horizon, p.pos, cosA, sinA, eyeZ)

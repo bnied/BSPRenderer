@@ -22,7 +22,7 @@ func (r *Renderer) drawMinimap(p *Player) {
 	// Auto-fit the map bounds into a fixed minimap box.
 	minX, minY := math.Inf(1), math.Inf(1)
 	maxX, maxY := math.Inf(-1), math.Inf(-1)
-	for _, v := range vertices {
+	for _, v := range r.level.vertices {
 		if v.x < minX {
 			minX = v.x
 		}
@@ -58,9 +58,9 @@ func (r *Renderer) drawMinimap(p *Player) {
 	}
 
 	// Linedefs.
-	for _, l := range linedefs {
-		ax, ay := project(vertices[l.v1])
-		bx, by := project(vertices[l.v2])
+	for _, l := range r.level.linedefs {
+		ax, ay := project(r.level.vertex(l.v1))
+		bx, by := project(r.level.vertex(l.v2))
 		col := RGBA{120, 120, 120, 255}
 		if l.backSector == noSector {
 			col = l.wallColor

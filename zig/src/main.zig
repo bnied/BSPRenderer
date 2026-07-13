@@ -89,10 +89,11 @@ pub fn main() !void {
     _ = c.SDL_SetTextureScaleMode(texture, c.SDL_SCALEMODE_NEAREST);
 
     // ---- Build the world ----
+    const lvl = &level.showcase;
     var player: player_mod.Player = .{};
-    var renderer = try renderer_mod.Renderer.init(allocator, internal_w, internal_h);
+    var renderer = try renderer_mod.Renderer.init(allocator, lvl, internal_w, internal_h);
     defer renderer.deinit();
-    const bsp_root = try bsp.buildBSP(bsp_alloc, level.segs);
+    const bsp_root = try bsp.buildBSP(bsp_alloc, lvl.segs);
 
     // ---- Main loop ----
     var last_tick_ns: u64 = c.SDL_GetTicksNS();
@@ -130,7 +131,7 @@ pub fn main() !void {
             .turn_r   = keys[c.SDL_SCANCODE_RIGHT],
         };
 
-        player.update(dt, in, bsp_root);
+        player.update(dt, in, lvl, bsp_root);
         renderer.render(&player, bsp_root);
 
         // Push our RGBA buffer into the streaming texture.
@@ -142,7 +143,7 @@ pub fn main() !void {
 
         // HUD overlay using SDL3's built-in 8×8 debug font.
         const si: usize = @intCast(bsp.findSector(player.pos, bsp_root));
-        const sec = level.sectors[si];
+        const sec = lvl.sectors[si];
         var hud_buf: [160]u8 = undefined;
         const hud = try std.fmt.bufPrintZ(&hud_buf,
             "sector {d}   floor {d}   ceil {d}   feetZ {d}   eyeZ {d}{s}",

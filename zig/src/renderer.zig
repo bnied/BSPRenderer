@@ -27,6 +27,7 @@ const Visplane = visplane_mod.Visplane;
 const Player = player_mod.Player;
 
 pub const Renderer = struct {
+    lvl: *const level.Level,
     buf_w: i32,
     buf_h: i32,
     pixels: []u8,
@@ -39,20 +40,21 @@ pub const Renderer = struct {
     slow_step: i32 = 0,
     slow_column_budget: i32 = 0,
 
-    pub fn init(allocator: std.mem.Allocator, width: i32, height: i32) !Renderer {
+    pub fn init(allocator: std.mem.Allocator, lvl: *const level.Level, width: i32, height: i32) !Renderer {
         const w: usize = @intCast(width);
         const h: usize = @intCast(height);
         const pixels = try allocator.alloc(u8, w * h * 4);
         const y_top = try allocator.alloc(i32, w);
         const y_bot = try allocator.alloc(i32, w);
 
-        const visplanes = try allocator.alloc(Visplane, level.sectors.len * 2);
-        for (level.sectors, 0..) |_, si| {
+        const visplanes = try allocator.alloc(Visplane, lvl.sectors.len * 2);
+        for (lvl.sectors, 0..) |_, si| {
             visplanes[si * 2 + 0] = try Visplane.init(allocator, @intCast(si), false, w); // floor
             visplanes[si * 2 + 1] = try Visplane.init(allocator, @intCast(si), true,  w); // ceiling
         }
 
         return Renderer{
+            .lvl = lvl,
             .buf_w = width,
             .buf_h = height,
             .pixels = pixels,
@@ -91,7 +93,7 @@ pub const Renderer = struct {
         for (self.visplanes) |*vp| vp.reset();
 
         const player_sector: usize = @intCast(bsp.findSector(player.pos, bsp_root));
-        const sec = level.sectors[player_sector];
+        const sec = self.lvl.sectors[player_sector];
         const half_w: f64 = @as(f64, @floatFromInt(self.buf_w)) / 2.0;
         const half_h: f64 = @as(f64, @floatFromInt(self.buf_h)) / 2.0;
         const horizon: f64 = half_h;
@@ -292,18 +294,18 @@ pub const Renderer = struct {
 
         // Wall heights stored as world Z; what matters for projection is the
         // signed distance from the eye, so we precompute (sectorZ - eyeZ).
-        const front = level.sectors[@intCast(seg.front_sector)];
+        const front = self.lvl.sectors[@intCast(seg.front_sector)];
         const f_ceil  = front.ceil_h  - eye_z;
         const f_floor = front.floor_h - eye_z;
         var b_ceil: f64 = 0;
         var b_floor: f64 = 0;
         if (seg.back_sector != level.no_sector) {
-            const back = level.sectors[@intCast(seg.back_sector)];
+            const back = self.lvl.sectors[@intCast(seg.back_sector)];
             b_ceil  = back.ceil_h  - eye_z;
             b_floor = back.floor_h - eye_z;
         }
 
-        const linedef = level.linedefs[seg.linedef_index];
+        const linedef = self.lvl.linedefs[seg.linedef_index];
         const front_light = front.light;
 
         // Perspective-correct interpolation: linear in 1/d across screen X.
@@ -393,7 +395,7 @@ pub const Renderer = struct {
     ) void {
         for (self.visplanes) |*plane| {
             if (plane.max_x < plane.min_x) continue;
-            const sec = level.sectors[@intCast(plane.sector_index)];
+            const sec = self.lvl.sectors[@intCast(plane.sector_index)];
             const plane_z = if (plane.is_ceiling) sec.ceil_h else sec.floor_h;
             const color   = if (plane.is_ceiling) sec.ceil_color else sec.floor_color;
             const plane_height = plane_z - eye_z;
@@ -506,7 +508,7 @@ pub const Renderer = struct {
         var min_y: f64 =  std.math.inf(f64);
         var max_x: f64 = -std.math.inf(f64);
         var max_y: f64 = -std.math.inf(f64);
-        for (level.vertices) |v| {
+        for (self.lvl.vertices) |v| {
             if (v.x < min_x) min_x = v.x;
             if (v.y < min_y) min_y = v.y;
             if (v.x > max_x) max_x = v.x;
@@ -544,9 +546,9 @@ pub const Renderer = struct {
         }
 
         // Linedefs.
-        for (level.linedefs) |l| {
-            const a = project(level.vertices[l.v1], min_x, min_y, pad, ox, oy, s);
-            const b = project(level.vertices[l.v2], min_x, min_y, pad, ox, oy, s);
+        for (self.lvl.linedefs) |l| {
+            const a = project(self.lvl.vertices[l.v1], min_x, min_y, pad, ox, oy, s);
+            const b = project(self.lvl.vertices[l.v2], min_x, min_y, pad, ox, oy, s);
             const col: RGBA = if (l.back_sector == level.no_sector) l.wall_color else .{ .r = 120, .g = 120, .b = 120 };
             self.drawLine(a.x, a.y, b.x, b.y, col);
         }

@@ -50,7 +50,7 @@ pub const Player = struct {
         return self.baseline_eye_z + self.eye_follow_factor * (self.feet_z - feet_baseline);
     }
 
-    pub fn update(self: *Player, dt: f64, in: Input, bsp_root: *const bsp.BSPNode) void {
+    pub fn update(self: *Player, dt: f64, in: Input, lvl: *const level.Level, bsp_root: *const bsp.BSPNode) void {
         const rot = self.rot_speed * dt;
         const mv  = self.move_speed * dt;
 
@@ -73,16 +73,16 @@ pub const Player = struct {
         // sticking to them.
         const radius: f64 = 8.0;
         const cur_sector: usize = @intCast(bsp.findSector(self.pos, bsp_root));
-        const current_floor_h = level.sectors[cur_sector].floor_h;
+        const current_floor_h = lvl.sectors[cur_sector].floor_h;
 
         const try_x: Vec2 = .{ .x = self.pos.x + dx, .y = self.pos.y };
-        if (!collides(try_x, radius, current_floor_h, self.eye_over_floor)) self.pos.x = try_x.x;
+        if (!collides(lvl, try_x, radius, current_floor_h, self.eye_over_floor)) self.pos.x = try_x.x;
         const try_y: Vec2 = .{ .x = self.pos.x, .y = self.pos.y + dy };
-        if (!collides(try_y, radius, current_floor_h, self.eye_over_floor)) self.pos.y = try_y.y;
+        if (!collides(lvl, try_y, radius, current_floor_h, self.eye_over_floor)) self.pos.y = try_y.y;
 
         // Snap feet to the new sector's floor (no gravity / falling).
         const new_sector: usize = @intCast(bsp.findSector(self.pos, bsp_root));
-        self.feet_z = level.sectors[new_sector].floor_h;
+        self.feet_z = lvl.sectors[new_sector].floor_h;
     }
 };
 
@@ -102,15 +102,15 @@ fn pointSegmentDistance(p: Vec2, a: Vec2, b: Vec2) f64 {
 //   - solid one-sided wall, OR
 //   - portal whose opening is too short to walk through, OR
 //   - portal whose target floor is more than max_step_up above us.
-fn collides(p: Vec2, radius: f64, current_floor_h: f64, eye_over_floor: f64) bool {
+fn collides(lvl: *const level.Level, p: Vec2, radius: f64, current_floor_h: f64, eye_over_floor: f64) bool {
     const max_step_up: f64 = 24.0;
-    for (level.linedefs) |l| {
-        const a = level.vertices[l.v1];
-        const b = level.vertices[l.v2];
+    for (lvl.linedefs) |l| {
+        const a = lvl.vertices[l.v1];
+        const b = lvl.vertices[l.v2];
         if (pointSegmentDistance(p, a, b) >= radius) continue;
         if (l.back_sector == level.no_sector) return true;
-        const front = level.sectors[@intCast(l.front_sector)];
-        const back  = level.sectors[@intCast(l.back_sector)];
+        const front = lvl.sectors[@intCast(l.front_sector)];
+        const back  = lvl.sectors[@intCast(l.back_sector)];
 
         // Portal opening tall enough for the player to fit through?
         const opening_top    = @min(front.ceil_h,  back.ceil_h);

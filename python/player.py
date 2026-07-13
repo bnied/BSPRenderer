@@ -13,8 +13,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from bsp import BSPNode, find_sector
-from level import linedefs, sectors, vertices
+from bsp import Bsp
+from level import Level
 from math_utils import Vec2, clamp_f
 from geometry import NO_SECTOR
 
@@ -77,7 +77,7 @@ class Player:
         feet_baseline = self.baseline_eye_z - self.eye_over_floor
         return self.baseline_eye_z + self.eye_follow_factor * (self.feet_z - feet_baseline)
 
-    def update(self, dt: float, in_: Input, bsp_root: BSPNode) -> None:
+    def update(self, dt: float, in_: Input, bsp: Bsp, level: Level) -> None:
         """Advance by `dt` seconds of simulation time. Movement is
         axis-separated and probed against all solid linedefs so the player
         can slide along walls instead of getting stuck on them."""
@@ -109,32 +109,33 @@ class Player:
             dy += cos_a * mv
 
         radius = 8.0
-        current_floor_h = sectors[find_sector(self.pos, bsp_root)].floor_h
+        current_floor_h = level.sectors[bsp.find_sector(self.pos)].floor_h
 
         try_x = Vec2(self.pos.x + dx, self.pos.y)
-        if not self._collides(try_x, radius, current_floor_h):
+        if not self._collides(try_x, radius, current_floor_h, level):
             self.pos = try_x
         try_y = Vec2(self.pos.x, self.pos.y + dy)
-        if not self._collides(try_y, radius, current_floor_h):
+        if not self._collides(try_y, radius, current_floor_h, level):
             self.pos = try_y
 
         # Snap feet to the new sector's floor (no gravity / falling).
-        self.feet_z = sectors[find_sector(self.pos, bsp_root)].floor_h
+        self.feet_z = level.sectors[bsp.find_sector(self.pos)].floor_h
 
-    def _collides(self, pos: Vec2, radius: float, current_floor_h: float) -> bool:
+    def _collides(self, pos: Vec2, radius: float, current_floor_h: float,
+                  level: Level) -> bool:
         """A linedef blocks movement if it's one-sided, OR a portal whose
         opening is too short, OR the back-side floor is more than max_step_up
         above the side we're standing on."""
         max_step_up = 24.0
-        for l in linedefs:
-            a = vertices[l.v1]
-            b = vertices[l.v2]
+        for l in level.linedefs:
+            a = level.vertices[l.v1]
+            b = level.vertices[l.v2]
             if _point_segment_distance(pos, a, b) >= radius:
                 continue
             if l.back_sector == NO_SECTOR:
                 return True
-            front = sectors[l.front_sector]
-            back = sectors[l.back_sector]
+            front = level.sectors[l.front_sector]
+            back = level.sectors[l.back_sector]
 
             # Portal opening must be tall enough to fit through.
             opening_top = min(front.ceil_h, back.ceil_h)

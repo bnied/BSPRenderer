@@ -2,6 +2,32 @@ package main
 
 import "math"
 
+// BSP wraps a built partition tree with the two query methods the rest of the
+// engine needs. It holds the *Level so FindSector can resolve seg sectors and
+// callers don't have to thread the level separately.
+type BSP struct {
+	root  bspNode
+	level *Level
+}
+
+// NewBSP builds a balanced-ish BSP over the level's segs.
+func NewBSP(level *Level) *BSP {
+	return &BSP{root: buildBSP(level.generateSegs()), level: level}
+}
+
+// FindSector descends the tree to the leaf containing pos and returns its
+// sector index. Used both per-tick (player's current sector for HUD + floor
+// height) and inside player.Update for collision step-up checks.
+func (b *BSP) FindSector(pos Vec2) int {
+	return findSector(pos, b.root)
+}
+
+// Traverse walks the tree front-to-back from `from` and invokes `visit` on
+// every seg in order.
+func (b *BSP) Traverse(from Vec2, visit func(Seg)) {
+	traverseBSP(b.root, from, visit)
+}
+
 // buildBSP constructs a BSP tree from a flat slice of segs. It runs once at
 // startup. The recursion ends in two ways:
 //
@@ -15,13 +41,13 @@ import "math"
 // straddle splits (because each straddle costs us a seg duplication), and
 // pick the lowest score. This is small-map-grade quality, not a serious BSP
 // builder, but it's deterministic and produces clean trees on the test map.
-func buildBSP(segs []Seg) *BSPNode {
+func buildBSP(segs []Seg) bspNode {
 	if len(segs) <= 1 {
 		sec := 0
 		if len(segs) > 0 {
 			sec = segs[0].frontSector
 		}
-		return &BSPNode{leaf: true, segs: segs, sector: sec}
+		return &bspLeaf{segs: segs, sector: sec}
 	}
 
 	bestIdx := -1
@@ -60,7 +86,7 @@ func buildBSP(segs []Seg) *BSPNode {
 
 	if bestIdx == -1 {
 		// Convex enough — every candidate leaves one side empty.
-		return &BSPNode{leaf: true, segs: segs, sector: segs[0].frontSector}
+		return &bspLeaf{segs: segs, sector: segs[0].frontSector}
 	}
 
 	// Distribute the remaining segs across the two children.
@@ -112,8 +138,7 @@ func buildBSP(segs []Seg) *BSPNode {
 		}
 	}
 
-	return &BSPNode{
-		leaf:   false,
+	return &bspBranch{
 		pStart: pStart,
 		pDelta: pDelta,
 		left:   buildBSP(leftSegs),

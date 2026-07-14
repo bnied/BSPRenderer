@@ -41,8 +41,8 @@ import time
 
 import pygame
 
-from bsp import build_bsp, find_sector, generate_segs
-from level import sectors
+from bsp import Bsp
+from level import SHOWCASE
 from player import Input, Player
 from renderer import Renderer
 
@@ -61,9 +61,10 @@ def main() -> None:
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("menlo,monaco,consolas,monospace", 14)
 
+    level = SHOWCASE
     player = Player()
-    renderer = Renderer(INTERNAL_W, INTERNAL_H)
-    bsp_root = build_bsp(generate_segs())
+    renderer = Renderer(INTERNAL_W, INTERNAL_H, level)
+    bsp = Bsp.build(level)
 
     last = time.perf_counter()
     running = True
@@ -93,8 +94,8 @@ def main() -> None:
             turn_r=keys[pygame.K_RIGHT],
         )
 
-        player.update(dt, in_, bsp_root)
-        renderer.render(player, bsp_root)
+        player.update(dt, in_, bsp, level)
+        renderer.render(player, bsp)
 
         # Wrap the numpy buffer in a pygame Surface and upscale to the window.
         # frombuffer reads (H, W, 4) row-major RGBA — matches our pixel layout.
@@ -106,8 +107,8 @@ def main() -> None:
         screen.blit(upscaled, (0, 0))
 
         # HUD: dim backdrop + sector / height / slow-mode info.
-        si = find_sector(player.pos, bsp_root)
-        s = sectors[si]
+        si = bsp.find_sector(player.pos)
+        s = level.sectors[si]
         slow_tag = "   [SLOW]" if renderer.slow_mode else ""
         fps = clock.get_fps()
         hud = (f"sector {si}   floor {int(s.floor_h):+d}   ceil {int(s.ceil_h):+d}"

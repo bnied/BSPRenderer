@@ -55,17 +55,20 @@ const (
 // Game is Ebiten's per-frame entry point. Update runs at a fixed tick rate
 // (defaults to 60 Hz); Draw runs once per displayed frame.
 type Game struct {
+	level    *Level
 	player   *Player
 	renderer *Renderer
-	bsp      *BSPNode
+	bsp      *BSP
 	last     time.Time
 }
 
 func NewGame() *Game {
+	level := NewShowcaseLevel()
 	return &Game{
-		player:   NewPlayer(),
-		renderer: NewRenderer(internalW, internalH),
-		bsp:      buildBSP(generateSegs()),
+		level:    level,
+		player:   NewPlayer(level),
+		renderer: NewRenderer(level, internalW, internalH),
+		bsp:      NewBSP(level),
 		last:     time.Now(),
 	}
 }
@@ -107,8 +110,8 @@ func (g *Game) Update() error {
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.WritePixels(g.renderer.pixels)
 
-	si := findSector(g.player.pos, g.bsp)
-	s := sectors[si]
+	si := g.bsp.FindSector(g.player.pos)
+	s := g.level.sector(si)
 	slowTag := ""
 	if g.renderer.slowMode {
 		slowTag = "   [SLOW]"

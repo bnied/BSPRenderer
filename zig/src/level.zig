@@ -103,11 +103,23 @@ pub const Seg = struct {
     linedef_index: u32 = 0,
 };
 
+// Level bundles the four map arrays as slices, replacing what used to be
+// file-level globals. It carries no ownership: `showcase` below points its
+// slices straight at comptime `..._data` constants, so the whole value lives
+// in .rodata — constructing it costs nothing at runtime. Callers thread a
+// `Level` (or `*const Level`) explicitly instead of reaching for globals.
+pub const Level = struct {
+    vertices: []const Vec2,
+    sectors:  []const Sector,
+    linedefs: []const LineDef,
+    segs:     []const Seg,
+};
+
 // ---------------------------------------------------------------------------
 // Authored level data
 // ---------------------------------------------------------------------------
 
-pub const vertices = [_]Vec2{
+const vertices_data = [_]Vec2{
     // Hub perimeter
     .{ .x = 0,   .y = 0   }, //  0 hub NW
     .{ .x = 80,  .y = 0   }, //  1 hub N opening west (catwalk entry)
@@ -178,7 +190,7 @@ const stair4_wall: RGBA   = .{ .r = 90,  .g = 190, .b = 220 };
 const overlook_wall: RGBA = .{ .r = 210, .g = 220, .b = 235 };
 const alcove_wall: RGBA   = .{ .r = 220, .g = 140, .b = 190 };
 
-pub const sectors = [_]Sector{
+const sectors_data = [_]Sector{
     // 0: Hub.
     .{ .floor_h =   0, .ceil_h =  80, .floor_color = .{ .r =  82, .g =  76, .b =  60 }, .ceil_color = .{ .r =  50, .g =  56, .b =  70 }, .light = 0.85 },
     // 1: Vestigial (was pillar interior; pillar walls are one-sided now).
@@ -205,7 +217,7 @@ pub const sectors = [_]Sector{
     .{ .floor_h =  30, .ceil_h = 110, .floor_color = .{ .r = 210, .g = 130, .b = 180 }, .ceil_color = .{ .r = 160, .g =  80, .b = 130 }, .light = 0.85 },
 };
 
-pub const linedefs = [_]LineDef{
+const linedefs_data = [_]LineDef{
     // ---- Hub perimeter (front = 0) ----
     .{ .v1 = 0, .v2 = 1, .front_sector = 0, .back_sector = no_sector, .wall_color = main_wall, .upper_color = main_upper, .lower_color = main_lower },
     .{ .v1 = 1, .v2 = 2, .front_sector = 0, .back_sector = 2,         .wall_color = main_wall, .upper_color = main_upper, .lower_color = catwalk_wall }, // → catwalk
@@ -289,13 +301,13 @@ pub const linedefs = [_]LineDef{
 // right front sector).
 // ---------------------------------------------------------------------------
 
-pub const segs: []const Seg = blk: {
+const segs_data: []const Seg = blk: {
     @setEvalBranchQuota(20_000);
-    var buf: [linedefs.len * 2]Seg = undefined;
+    var buf: [linedefs_data.len * 2]Seg = undefined;
     var n: usize = 0;
-    for (linedefs, 0..) |l, i| {
-        const a = vertices[l.v1];
-        const b = vertices[l.v2];
+    for (linedefs_data, 0..) |l, i| {
+        const a = vertices_data[l.v1];
+        const b = vertices_data[l.v2];
         buf[n] = .{
             .v1 = a,
             .v2 = b,
@@ -317,4 +329,14 @@ pub const segs: []const Seg = blk: {
     }
     const final = buf;
     break :blk final[0..n];
+};
+
+// The one authored level. Slices point at the comptime `..._data` constants
+// above, so `showcase` is itself a comptime value in .rodata — no allocation,
+// no startup init.
+pub const showcase: Level = .{
+    .vertices = &vertices_data,
+    .sectors  = &sectors_data,
+    .linedefs = &linedefs_data,
+    .segs     = segs_data,
 };

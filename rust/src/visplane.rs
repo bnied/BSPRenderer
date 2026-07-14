@@ -26,14 +26,19 @@
 pub const TOP_EMPTY: i32 = 1 << 30;
 pub const BOT_EMPTY: i32 = -(1 << 30);
 
+/// The coverage buffers (`top`/`bot`) and the touched-range bookkeeping
+/// (`min_x`/`max_x`) are private: [`Visplane::reset`] and [`Visplane::extend`]
+/// are the only ways to mutate them, which keeps `min_x`/`max_x` and the
+/// `top`/`bot` spans consistent by construction. Read access is via the
+/// accessors below.
 #[derive(Debug)]
 pub struct Visplane {
-    pub sector_index: usize,
-    pub is_ceiling: bool,
-    pub top: Vec<i32>,
-    pub bot: Vec<i32>,
-    pub min_x: i32,
-    pub max_x: i32,
+    sector_index: usize,
+    is_ceiling: bool,
+    top: Vec<i32>,
+    bot: Vec<i32>,
+    min_x: i32,
+    max_x: i32,
 }
 
 impl Visplane {
@@ -77,5 +82,25 @@ impl Visplane {
         if x > self.max_x {
             self.max_x = x;
         }
+    }
+
+    /// The inclusive column range `[min_x, max_x]` this plane received coverage
+    /// on this frame, or `None` if it was never touched.
+    pub fn covered(&self) -> Option<(i32, i32)> {
+        (self.max_x >= self.min_x).then_some((self.min_x, self.max_x))
+    }
+
+    /// The `(top, bot)` span at column `x`. Only meaningful for columns inside
+    /// [`Visplane::covered`]; elsewhere it returns the empty sentinels.
+    pub fn span_at(&self, x: usize) -> (i32, i32) {
+        (self.top[x], self.bot[x])
+    }
+
+    pub fn sector_index(&self) -> usize {
+        self.sector_index
+    }
+
+    pub fn is_ceiling(&self) -> bool {
+        self.is_ceiling
     }
 }

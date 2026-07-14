@@ -49,7 +49,45 @@ struct Seg {
 //  10 overlook     floor  70, ceil 130, bright cool    — top platform
 //  11 alcove       floor  30, ceil 110, magenta        — east of arena
 
-let vertices: [Vec2] = [
+// ============================================================
+// MARK: - Level
+//
+// A Level owns the hand-authored geometry (vertices, sectors, linedefs). A
+// struct is the right fit: the map is immutable, has value semantics, and its
+// arrays are copy-on-write so threading a `Level` through the renderer, player,
+// and BSP builder is cheap. This replaces what used to be three loose top-level
+// globals; `Level.showcase` is the single authored instance.
+
+struct Level {
+    let vertices: [Vec2]
+    let sectors: [Sector]
+    let linedefs: [LineDef]
+
+    // The single hand-authored showcase map.
+    static let showcase = Level(
+        vertices: showcaseVertices,
+        sectors: showcaseSectors,
+        linedefs: showcaseLinedefs
+    )
+
+    // generateSegs flattens the linedef list into the seg list the BSP builder
+    // consumes. One-sided linedefs produce one seg; two-sided linedefs produce
+    // two (one per side, with sectors swapped).
+    func generateSegs() -> [Seg] {
+        var out: [Seg] = []
+        for (i, l) in linedefs.enumerated() {
+            let a = vertices[l.v1]
+            let b = vertices[l.v2]
+            out.append(Seg(v1: a, v2: b, frontSector: l.frontSector, backSector: l.backSector, lineDefIndex: i))
+            if let back = l.backSector {
+                out.append(Seg(v1: b, v2: a, frontSector: back, backSector: l.frontSector, lineDefIndex: i))
+            }
+        }
+        return out
+    }
+}
+
+private let showcaseVertices: [Vec2] = [
     // Hub perimeter
     Vec2(x:   0, y:   0),   //  0 hub NW
     Vec2(x:  80, y:   0),   //  1 hub N opening west (catwalk entry)
@@ -104,24 +142,24 @@ let vertices: [Vec2] = [
 ]
 
 // Per-sector wall colors.
-let mainWall     = RGBA(r: 158, g: 144, b: 115, a: 255) // hub warm tan
-let mainUpper    = RGBA(r: 110, g: 105, b:  92, a: 255)
-let mainLower    = RGBA(r: 118, g:  96, b:  72, a: 255)
-let pillarWall   = RGBA(r: 210, g: 215, b: 225, a: 255) // bright stone
-let catwalkWall  = RGBA(r: 108, g: 170, b:  82, a: 255) // green
-let pitWall      = RGBA(r: 140, g: 100, b: 180, a: 255) // violet
-let corrWall     = RGBA(r:  94, g: 134, b: 200, a: 255) // blue
-let arenaWall    = RGBA(r: 196, g:  90, b:  62, a: 255) // red
-let arenaUpper   = RGBA(r: 140, g:  70, b:  50, a: 255)
-let arenaLower   = RGBA(r: 220, g: 130, b:  90, a: 255)
-let stair1Wall   = RGBA(r: 210, g: 130, b:  70, a: 255) // orange
-let stair2Wall   = RGBA(r: 220, g: 180, b:  80, a: 255) // gold
-let stair3Wall   = RGBA(r: 140, g: 210, b:  90, a: 255) // lime
-let stair4Wall   = RGBA(r:  90, g: 190, b: 220, a: 255) // cyan
-let overlookWall = RGBA(r: 210, g: 220, b: 235, a: 255) // bright cool gray
-let alcoveWall   = RGBA(r: 220, g: 140, b: 190, a: 255) // magenta
+private let mainWall     = RGBA(r: 158, g: 144, b: 115, a: 255) // hub warm tan
+private let mainUpper    = RGBA(r: 110, g: 105, b:  92, a: 255)
+private let mainLower    = RGBA(r: 118, g:  96, b:  72, a: 255)
+private let pillarWall   = RGBA(r: 210, g: 215, b: 225, a: 255) // bright stone
+private let catwalkWall  = RGBA(r: 108, g: 170, b:  82, a: 255) // green
+private let pitWall      = RGBA(r: 140, g: 100, b: 180, a: 255) // violet
+private let corrWall     = RGBA(r:  94, g: 134, b: 200, a: 255) // blue
+private let arenaWall    = RGBA(r: 196, g:  90, b:  62, a: 255) // red
+private let arenaUpper   = RGBA(r: 140, g:  70, b:  50, a: 255)
+private let arenaLower   = RGBA(r: 220, g: 130, b:  90, a: 255)
+private let stair1Wall   = RGBA(r: 210, g: 130, b:  70, a: 255) // orange
+private let stair2Wall   = RGBA(r: 220, g: 180, b:  80, a: 255) // gold
+private let stair3Wall   = RGBA(r: 140, g: 210, b:  90, a: 255) // lime
+private let stair4Wall   = RGBA(r:  90, g: 190, b: 220, a: 255) // cyan
+private let overlookWall = RGBA(r: 210, g: 220, b: 235, a: 255) // bright cool gray
+private let alcoveWall   = RGBA(r: 220, g: 140, b: 190, a: 255) // magenta
 
-let sectors: [Sector] = [
+private let showcaseSectors: [Sector] = [
     // 0: Hub.
     Sector(floorH: 0, ceilH: 80,
            floorColor: RGBA(r:  82, g:  76, b:  60, a: 255),
@@ -186,7 +224,7 @@ let sectors: [Sector] = [
            light: 0.85),
 ]
 
-let linedefs: [LineDef] = [
+private let showcaseLinedefs: [LineDef] = [
     // ---- Hub perimeter (front = 0) ----
     LineDef(v1: 0, v2: 1, frontSector: 0, backSector: nil, wallColor: mainWall, upperColor: mainUpper, lowerColor: mainLower),
     LineDef(v1: 1, v2: 2, frontSector: 0, backSector: 2, wallColor: mainWall, upperColor: mainUpper, lowerColor: catwalkWall), // → catwalk

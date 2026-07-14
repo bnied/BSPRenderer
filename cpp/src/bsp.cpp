@@ -3,9 +3,49 @@
 
 #include <climits>
 #include <cstdlib>
+#include <variant>
 
+// Node is a leaf (segs + sector) or an internal node (partition line + two
+// children). Modeled as a std::variant so the "which fields are valid" state
+// is carried by the active alternative instead of a hand-managed flag.
+struct Bsp::Node {
+    struct Leaf {
+        std::vector<Seg> segs;
+        int sector = 0;
+    };
+    struct Internal {
+        Vec2 pStart;
+        Vec2 pDelta;
+        std::unique_ptr<Node> left;
+        std::unique_ptr<Node> right;
+    };
+    std::variant<Leaf, Internal> kind;
+};
+
+namespace {
+
+using Node = Bsp::Node;
+
+// sideOf returns the signed perp-product of (p - pStart) against pDelta.
+//   positive → p is to the LEFT of the directed partition,
+//   negative → p is to the RIGHT,
+//   zero     → on the line.
+double sideOf(Vec2 p, Vec2 pStart, Vec2 pDelta) {
+    return pDelta.x * (p.y - pStart.y) - pDelta.y * (p.x - pStart.x);
+}
+
+enum class SegSide {
+    Left,      // both endpoints in left half-space
+    Right,     // both endpoints in right half-space
+    Straddle,  // crosses the line — split at intersection
+    Collinear, // both endpoints lie on the line
+};
+
+// classify tests a seg against a partition line and reports which side it
+// falls on. For Straddle, *outIntersection (if non-null) receives the
+// world-space intersection point so the builder can split the seg there.
 SegSide classify(const Seg& seg, Vec2 partStart, Vec2 partDelta,
-                 Vec2* outIntersection) {
+                 Vec2* outIntersection = nullptr) {
     constexpr double eps = 1e-4;
     double d1 = sideOf(seg.v1, partStart, partDelta);
     double d2 = sideOf(seg.v2, partStart, partDelta);
@@ -31,32 +71,19 @@ SegSide classify(const Seg& seg, Vec2 partStart, Vec2 partDelta,
     return SegSide::Straddle;
 }
 
-std::vector<Seg> generateSegs() {
-    std::vector<Seg> out;
-    out.reserve(linedefs.size() * 2);
-    for (int i = 0; i < static_cast<int>(linedefs.size()); ++i) {
-        const auto& l = linedefs[i];
-        Vec2 a = vertices[l.v1];
-        Vec2 b = vertices[l.v2];
-        // Authored direction (front side).
-        out.push_back(Seg{a, b, l.frontSector, l.backSector, i});
-        // Reverse direction (back side) for two-sided linedefs.
-        if (l.backSector != noSector) {
-            out.push_back(Seg{b, a, l.backSector, l.frontSector, i});
-        }
-    }
-    return out;
+// makeLeaf builds a leaf node owning `segs`.
+std::unique_ptr<Node> makeLeaf(std::vector<Seg> segs) {
+    auto node = std::make_unique<Node>();
+    Node::Leaf leaf;
+    leaf.sector = segs.empty() ? 0 : segs[0].frontSector;
+    leaf.segs = std::move(segs);
+    node->kind = std::move(leaf);
+    return node;
 }
 
-std::unique_ptr<BSPNode> buildBSP(std::vector<Seg> segs) {
-    auto node = std::make_unique<BSPNode>();
-
-    if (segs.size() <= 1) {
-        node->leaf = true;
-        node->sector = segs.empty() ? 0 : segs[0].frontSector;
-        node->segs = std::move(segs);
-        return node;
-    }
+// buildNode recursively partitions `segs` into a balanced-ish BSP tree.
+std::unique_ptr<Node> buildNode(std::vector<Seg> segs) {
+    if (segs.size() <= 1) return makeLeaf(std::move(segs));
 
     // Greedy partition pick: try every seg as a candidate and score by how
     // unbalanced it leaves the two sides plus a heavy 2× weight on straddle
@@ -86,13 +113,8 @@ std::unique_ptr<BSPNode> buildBSP(std::vector<Seg> segs) {
         }
     }
 
-    if (bestIdx == -1) {
-        // Convex enough — every candidate left one side empty.
-        node->leaf = true;
-        node->sector = segs[0].frontSector;
-        node->segs = std::move(segs);
-        return node;
-    }
+    // Convex enough — every candidate left one side empty.
+    if (bestIdx == -1) return makeLeaf(std::move(segs));
 
     Seg part = segs[bestIdx];
     Vec2 pStart = part.v1;
@@ -137,31 +159,53 @@ std::unique_ptr<BSPNode> buildBSP(std::vector<Seg> segs) {
         }
     }
 
-    node->leaf = false;
-    node->pStart = pStart;
-    node->pDelta = pDelta;
-    node->left  = buildBSP(std::move(leftSegs));
-    node->right = buildBSP(std::move(rightSegs));
+    auto node = std::make_unique<Node>();
+    Node::Internal internal;
+    internal.pStart = pStart;
+    internal.pDelta = pDelta;
+    internal.left  = buildNode(std::move(leftSegs));
+    internal.right = buildNode(std::move(rightSegs));
+    node->kind = std::move(internal);
     return node;
 }
 
-int findSector(Vec2 pos, const BSPNode& node) {
-    if (node.leaf) return node.sector;
-    if (sideOf(pos, node.pStart, node.pDelta) >= 0) return findSector(pos, *node.left);
-    return findSector(pos, *node.right);
+int findSectorIn(Vec2 pos, const Node& node) {
+    if (const auto* leaf = std::get_if<Node::Leaf>(&node.kind)) {
+        return leaf->sector;
+    }
+    const auto& in = std::get<Node::Internal>(node.kind);
+    if (sideOf(pos, in.pStart, in.pDelta) >= 0) return findSectorIn(pos, *in.left);
+    return findSectorIn(pos, *in.right);
 }
 
-void traverseBSP(const BSPNode& node, Vec2 player,
-                 const std::function<void(const Seg&)>& visit) {
-    if (node.leaf) {
-        for (const auto& s : node.segs) visit(s);
+void traverseIn(const Node& node, Vec2 player,
+                const std::function<void(const Seg&)>& visit) {
+    if (const auto* leaf = std::get_if<Node::Leaf>(&node.kind)) {
+        for (const auto& s : leaf->segs) visit(s);
         return;
     }
-    if (sideOf(player, node.pStart, node.pDelta) >= 0) {
-        traverseBSP(*node.left,  player, visit);
-        traverseBSP(*node.right, player, visit);
+    const auto& in = std::get<Node::Internal>(node.kind);
+    if (sideOf(player, in.pStart, in.pDelta) >= 0) {
+        traverseIn(*in.left,  player, visit);
+        traverseIn(*in.right, player, visit);
     } else {
-        traverseBSP(*node.right, player, visit);
-        traverseBSP(*node.left,  player, visit);
+        traverseIn(*in.right, player, visit);
+        traverseIn(*in.left,  player, visit);
     }
+}
+
+} // namespace
+
+Bsp::Bsp(const Level& level) : root_(buildNode(level.generateSegs())) {}
+Bsp::~Bsp() = default;
+Bsp::Bsp(Bsp&&) noexcept = default;
+Bsp& Bsp::operator=(Bsp&&) noexcept = default;
+
+int Bsp::findSector(Vec2 pos) const {
+    return findSectorIn(pos, *root_);
+}
+
+void Bsp::traverse(Vec2 player,
+                   const std::function<void(const Seg&)>& visit) const {
+    traverseIn(*root_, player, visit);
 }

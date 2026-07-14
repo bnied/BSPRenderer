@@ -1,14 +1,14 @@
-"""Binary Space Partition — node type, partition classification, builder, and
-the per-frame traversal helpers.
+"""Binary Space Partition — node types, partition classification, builder, and
+the per-frame traversal, wrapped as a class.
 
 A BSP recursively splits the map's plane into two half-spaces with a chosen
 partition line ("seg"). Internal nodes hold the partition; leaves hold a
 convex bag of segs that all live in a single sector. The point of the BSP
 at render time is twofold:
 
-  1. find_sector(pos) descends the tree once and returns the leaf sector the
-     player is currently standing in — O(depth), no per-tick search.
-  2. traverse_bsp(player_pos, visit) yields segs front-to-back, which lets
+  1. Bsp.find_sector(pos) descends the tree once and returns the leaf sector
+     the player is currently standing in — O(depth), no per-tick search.
+  2. Bsp.traverse(player_pos, visit) yields segs front-to-back, which lets
      the per-column clip arrays (yTop/yBot) terminate occluded columns
      without ever needing a depth buffer.
 """
@@ -16,28 +16,36 @@ at render time is twofold:
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
+from typing import TYPE_CHECKING
 
-from level import linedefs, vertices
 from math_utils import Vec2
 from geometry import NO_SECTOR, Seg
 
+if TYPE_CHECKING:
+    from level import Level
 
-@dataclass(slots=True)
-class BSPNode:
-    """Either a leaf (segs + sector) or an internal node (partition line +
-    left/right children)."""
 
-    leaf: bool
-    # Leaf only:
-    segs: list[Seg] = field(default_factory=list)
-    sector: int = 0
-    # Internal only:
-    p_start: Vec2 = Vec2(0, 0)
-    p_delta: Vec2 = Vec2(0, 0)
-    left: "BSPNode | None" = None
-    right: "BSPNode | None" = None
+@dataclass(slots=True, frozen=True)
+class BSPLeaf:
+    """A convex bag of segs that all live in a single sector."""
+
+    segs: list[Seg]
+    sector: int
+
+
+@dataclass(slots=True, frozen=True)
+class BSPInternal:
+    """A partition line plus the two child half-spaces."""
+
+    p_start: Vec2
+    p_delta: Vec2
+    left: "BSPNode"
+    right: "BSPNode"
+
+
+BSPNode = BSPLeaf | BSPInternal
 
 
 class SegSide(IntEnum):
@@ -86,38 +94,8 @@ def classify(seg: Seg, part_start: Vec2, part_delta: Vec2) -> tuple[SegSide, Vec
     return SegSide.STRADDLE, Vec2(ix, iy)
 
 
-def generate_segs() -> list[Seg]:
-    """Flatten the linedef list into the seg list that the BSP builder will
-    consume.
-
-    One-sided linedefs produce ONE seg in their authored direction (front
-    side only, because the back is solid and never visible).
-
-    Two-sided linedefs produce TWO segs — the second runs in reverse and
-    has its front/back sectors swapped. The BSP needs both because each
-    side of a portal will be rasterized from its own sector during
-    traversal, with its own ceiling/floor heights and per-sector light.
-    """
-    out: list[Seg] = []
-    for i, l in enumerate(linedefs):
-        a = vertices[l.v1]
-        b = vertices[l.v2]
-        # Authored direction (front side).
-        out.append(Seg(v1=a, v2=b,
-                       front_sector=l.front_sector,
-                       back_sector=l.back_sector,
-                       linedef_index=i))
-        # Reverse direction (back side) for two-sided linedefs.
-        if l.back_sector != NO_SECTOR:
-            out.append(Seg(v1=b, v2=a,
-                           front_sector=l.back_sector,
-                           back_sector=l.front_sector,
-                           linedef_index=i))
-    return out
-
-
-def build_bsp(segs: list[Seg]) -> BSPNode:
-    """Construct a BSP tree from a flat list of segs. Runs once at startup.
+def _build_node(segs: list[Seg]) -> BSPNode:
+    """Construct a BSP subtree from a flat list of segs. Runs once at startup.
 
     Recursion ends in two ways:
       - <= 1 seg left: trivial leaf.
@@ -131,7 +109,7 @@ def build_bsp(segs: list[Seg]) -> BSPNode:
     """
     if len(segs) <= 1:
         sec = segs[0].front_sector if segs else 0
-        return BSPNode(leaf=True, segs=list(segs), sector=sec)
+        return BSPLeaf(segs=list(segs), sector=sec)
 
     best_idx = -1
     best_score = 1 << 30
@@ -160,7 +138,7 @@ def build_bsp(segs: list[Seg]) -> BSPNode:
             best_idx = i
 
     if best_idx == -1:
-        return BSPNode(leaf=True, segs=list(segs), sector=segs[0].front_sector)
+        return BSPLeaf(segs=list(segs), sector=segs[0].front_sector)
 
     part = segs[best_idx]
     p_start = part.v1
@@ -201,39 +179,57 @@ def build_bsp(segs: list[Seg]) -> BSPNode:
             sb, _ = classify(b, p_start, p_delta)
             (left_segs if sb == SegSide.LEFT else right_segs).append(b)
 
-    return BSPNode(
-        leaf=False,
+    return BSPInternal(
         p_start=p_start,
         p_delta=p_delta,
-        left=build_bsp(left_segs),
-        right=build_bsp(right_segs),
+        left=_build_node(left_segs),
+        right=_build_node(right_segs),
     )
 
 
-def find_sector(pos: Vec2, node: BSPNode) -> int:
-    """Descend the BSP tree to the leaf containing pos and return its
-    sector index."""
-    while not node.leaf:
-        if side_of(pos, node.p_start, node.p_delta) >= 0:
-            node = node.left  # type: ignore[assignment]
-        else:
-            node = node.right  # type: ignore[assignment]
-    return node.sector
+class Bsp:
+    """The BSP tree over a level's segs, exposing the two per-frame queries."""
+
+    __slots__ = ("root",)
+
+    def __init__(self, root: BSPNode) -> None:
+        self.root = root
+
+    @classmethod
+    def build(cls, level: "Level") -> "Bsp":
+        """Build a balanced-ish BSP over the level's segs. The greedy
+        partition pick tries every candidate seg and scores by side imbalance
+        plus a heavy weight on straddle splits (each split duplicates a seg)."""
+        return cls(_build_node(level.generate_segs()))
+
+    def find_sector(self, pos: Vec2) -> int:
+        """Descend the BSP tree to the leaf containing pos and return its
+        sector index."""
+        node = self.root
+        while isinstance(node, BSPInternal):
+            if side_of(pos, node.p_start, node.p_delta) >= 0:
+                node = node.left
+            else:
+                node = node.right
+        return node.sector
+
+    def traverse(self, player: Vec2, visit: Callable[[Seg], None]) -> None:
+        """Walk the tree front-to-back from the player's position and invoke
+        `visit` on every seg in order. Going front-first is what makes the
+        per-column clip arrays act as a no-op depth buffer — by the time we
+        reach a far-away seg, columns it would have covered are already closed.
+        """
+        _traverse(self.root, player, visit)
 
 
-def traverse_bsp(node: BSPNode, player: Vec2, visit: Callable[[Seg], None]) -> None:
-    """Walk the tree front-to-back from the player's position and invoke
-    `visit` on every seg in order. Going front-first is what makes the
-    per-column clip arrays act as a no-op depth buffer — by the time we
-    reach a far-away seg, columns it would have covered are already closed.
-    """
-    if node.leaf:
+def _traverse(node: BSPNode, player: Vec2, visit: Callable[[Seg], None]) -> None:
+    if isinstance(node, BSPLeaf):
         for s in node.segs:
             visit(s)
         return
     if side_of(player, node.p_start, node.p_delta) >= 0:
-        traverse_bsp(node.left, player, visit)  # type: ignore[arg-type]
-        traverse_bsp(node.right, player, visit)  # type: ignore[arg-type]
+        _traverse(node.left, player, visit)
+        _traverse(node.right, player, visit)
     else:
-        traverse_bsp(node.right, player, visit)  # type: ignore[arg-type]
-        traverse_bsp(node.left, player, visit)  # type: ignore[arg-type]
+        _traverse(node.right, player, visit)
+        _traverse(node.left, player, visit)

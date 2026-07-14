@@ -38,7 +38,7 @@ double pointSegmentDistance(Vec2 p, Vec2 a, Vec2 b) {
 }
 }
 
-void Player::update(double dt, const Input& in, const BSPNode& bspRoot) {
+void Player::update(double dt, const Input& in, const Bsp& bsp, const Level& level) {
     double rot = rotSpeed * dt;
     double mv  = moveSpeed * dt;
 
@@ -59,15 +59,15 @@ void Player::update(double dt, const Input& in, const BSPNode& bspRoot) {
     // Axis-separated probe so the player slides along walls instead of
     // sticking to them.
     constexpr double radius = 8.0;
-    double currentFloorH = sectors[findSector(pos, bspRoot)].floorH;
+    double currentFloorH = level.sector(bsp.findSector(pos)).floorH;
 
     Vec2 tryX{pos.x + dx, pos.y};
-    if (!collides(tryX, radius, currentFloorH)) pos.x = tryX.x;
+    if (!collides(tryX, radius, currentFloorH, level)) pos.x = tryX.x;
     Vec2 tryY{pos.x, pos.y + dy};
-    if (!collides(tryY, radius, currentFloorH)) pos.y = tryY.y;
+    if (!collides(tryY, radius, currentFloorH, level)) pos.y = tryY.y;
 
     // Snap feet to the new sector's floor (no gravity / falling).
-    feetZ = sectors[findSector(pos, bspRoot)].floorH;
+    feetZ = level.sector(bsp.findSector(pos)).floorH;
 }
 
 // collides returns true if a circle of `radius` centered at `pos` is blocked
@@ -75,15 +75,16 @@ void Player::update(double dt, const Input& in, const BSPNode& bspRoot) {
 //   - solid one-sided wall, OR
 //   - portal whose opening is too short to walk through, OR
 //   - portal whose target floor is more than maxStepUp above us.
-bool Player::collides(Vec2 p, double radius, double currentFloorH) const {
+bool Player::collides(Vec2 p, double radius, double currentFloorH,
+                      const Level& level) const {
     constexpr double maxStepUp = 24.0;
-    for (const auto& l : linedefs) {
-        Vec2 a = vertices[l.v1];
-        Vec2 b = vertices[l.v2];
+    for (const auto& l : level.linedefs()) {
+        Vec2 a = level.vertex(l.v1);
+        Vec2 b = level.vertex(l.v2);
         if (pointSegmentDistance(p, a, b) >= radius) continue;
         if (l.backSector == noSector) return true;
-        const Sector& front = sectors[l.frontSector];
-        const Sector& back  = sectors[l.backSector];
+        const Sector& front = level.sector(l.frontSector);
+        const Sector& back  = level.sector(l.backSector);
 
         // Portal opening tall enough for the player to fit through?
         double openingTop    = std::min(front.ceilH,  back.ceilH);

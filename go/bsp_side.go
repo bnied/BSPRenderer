@@ -14,18 +14,27 @@ package main
 //      the per-column clip arrays (yTop/yBot) terminate occluded columns
 //      without ever needing a depth buffer.
 
-// BSPNode is either a leaf (segs + sector) or an internal node (partition
-// line + left/right children). Swift's `indirect enum BSPNode` translates
-// here as a tagged struct with pointer children — Go would otherwise give us
-// a recursive value type of infinite size.
-type BSPNode struct {
-	leaf   bool
-	segs   []Seg // leaf only: segs in this convex region
-	sector int   // leaf only: sector all those segs front onto
+// bspNode is either a leaf or a branch. Swift's `indirect enum BSPNode`
+// translates here as a sealed interface with two concrete implementations, so
+// leaf-only and branch-only fields can never be accessed on the wrong variant
+// (as they could with a single tagged struct). The isBSPNode marker method
+// seals the set — only types in this package can satisfy it.
+type bspNode interface{ isBSPNode() }
 
-	pStart, pDelta Vec2     // internal only: partition line as point + direction
-	left, right    *BSPNode // internal only: children. left = "front" of pDelta.
+// bspLeaf holds a convex bag of segs that all live in a single sector.
+type bspLeaf struct {
+	segs   []Seg // segs in this convex region
+	sector int   // sector all those segs front onto
 }
+
+// bspBranch holds a partition line and its two children.
+type bspBranch struct {
+	pStart, pDelta Vec2    // partition line as point + direction
+	left, right    bspNode // children. left = "front" of pDelta.
+}
+
+func (*bspLeaf) isBSPNode()   {}
+func (*bspBranch) isBSPNode() {}
 
 // SegSide is the result of testing a single seg against a partition line.
 type SegSide int

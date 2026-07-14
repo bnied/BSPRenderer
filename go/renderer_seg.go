@@ -134,17 +134,17 @@ func (r *Renderer) drawSeg(seg Seg,
 
 	// Wall heights are stored as world Z; what matters for projection is the
 	// signed distance from the eye, so we precompute (sectorZ - eyeZ).
-	front := sectors[seg.frontSector]
+	front := r.level.sector(seg.frontSector)
 	fCeil := front.ceilH - eyeZ
 	fFloor := front.floorH - eyeZ
 	var bCeil, bFloor float64
 	if seg.backSector != noSector {
-		back := sectors[seg.backSector]
+		back := r.level.sector(seg.backSector)
 		bCeil = back.ceilH - eyeZ
 		bFloor = back.floorH - eyeZ
 	}
 
-	lineDef := linedefs[seg.lineDefIndex]
+	lineDef := r.level.linedefs[seg.lineDefIndex]
 	frontLight := front.light
 
 	// Perspective-correct interpolation: linear in 1/d across screen X, not

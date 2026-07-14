@@ -12,6 +12,7 @@ package main
 import "math"
 
 type Player struct {
+	level           *Level  // the map, for collision queries against its linedefs
 	pos             Vec2    // (x, y) world position
 	feetZ           float64 // Z of the feet — tracks current sector's floorH
 	angle           float64 // facing angle in radians; 0 = +x, π/2 = +y
@@ -29,8 +30,9 @@ type Player struct {
 // first frame shows off the deep portal chain (hub → catwalk → 4 stair
 // sectors → overlook) rather than being dominated by the pillar. Turn
 // around to discover the pillar, the pit (south), and the corridor (east).
-func NewPlayer() *Player {
+func NewPlayer(level *Level) *Player {
 	return &Player{
+		level:           level,
 		pos:             Vec2{120, 50},
 		angle:           -math.Pi / 2,
 		fov:             70.0 * math.Pi / 180.0,
@@ -77,7 +79,7 @@ type Input struct {
 // current input state. Movement is axis-separated and probed against all
 // solid linedefs so the player can slide along walls instead of getting
 // stuck on them.
-func (p *Player) Update(dt float64, in Input, bspRoot *BSPNode) {
+func (p *Player) Update(dt float64, in Input, bsp *BSP) {
 	rot := p.rotSpeed * dt
 	mv := p.moveSpeed * dt
 
@@ -113,7 +115,7 @@ func (p *Player) Update(dt float64, in Input, bspRoot *BSPNode) {
 
 	// Axis-separated probe lets the player slide along walls.
 	radius := 8.0
-	currentFloorH := sectors[findSector(p.pos, bspRoot)].floorH
+	currentFloorH := p.level.sector(bsp.FindSector(p.pos)).floorH
 
 	tryX := Vec2{p.pos.x + dx, p.pos.y}
 	if !p.collides(tryX, radius, currentFloorH) {
@@ -125,7 +127,7 @@ func (p *Player) Update(dt float64, in Input, bspRoot *BSPNode) {
 	}
 
 	// Snap feet to the new sector's floor (no gravity / falling).
-	p.feetZ = sectors[findSector(p.pos, bspRoot)].floorH
+	p.feetZ = p.level.sector(bsp.FindSector(p.pos)).floorH
 }
 
 // collides returns true if a circle of `radius` centered at `pos` is blocked
@@ -138,17 +140,17 @@ func (p *Player) Update(dt float64, in Input, bspRoot *BSPNode) {
 //     standing on (cliff-like step).
 func (p *Player) collides(pos Vec2, radius, currentFloorH float64) bool {
 	const maxStepUp = 24.0
-	for _, l := range linedefs {
-		a := vertices[l.v1]
-		b := vertices[l.v2]
+	for _, l := range p.level.linedefs {
+		a := p.level.vertex(l.v1)
+		b := p.level.vertex(l.v2)
 		if pointSegmentDistance(pos, a, b) >= radius {
 			continue // not touching this wall
 		}
 		if l.backSector == noSector {
 			return true // solid one-sided wall
 		}
-		front := sectors[l.frontSector]
-		back := sectors[l.backSector]
+		front := p.level.sector(l.frontSector)
+		back := p.level.sector(l.backSector)
 
 		// Portal opening must be tall enough for the player to fit through.
 		openingTop := math.Min(front.ceilH, back.ceilH)

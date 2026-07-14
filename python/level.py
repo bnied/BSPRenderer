@@ -18,10 +18,14 @@ Sectors (12):
  11  alcove       floor  30, ceil 110, magenta      — east of arena
 """
 
-from math_utils import RGBA, Vec2
-from geometry import NO_SECTOR, LineDef, Sector
+from __future__ import annotations
 
-vertices: list[Vec2] = [
+from dataclasses import dataclass
+
+from math_utils import RGBA, Vec2
+from geometry import NO_SECTOR, LineDef, Seg, Sector
+
+_vertices: list[Vec2] = [
     # Hub perimeter
     Vec2(0, 0),       # 0  hub NW
     Vec2(80, 0),      # 1  hub N opening west (catwalk entry)
@@ -75,24 +79,24 @@ vertices: list[Vec2] = [
     Vec2(90, 120),    # 41 pillar W
 ]
 
-main_wall = RGBA(158, 144, 115, 255)
-main_upper = RGBA(110, 105, 92, 255)
-main_lower = RGBA(118, 96, 72, 255)
-pillar_wall = RGBA(210, 215, 225, 255)
-catwalk_wall = RGBA(108, 170, 82, 255)
-pit_wall = RGBA(140, 100, 180, 255)
-corr_wall = RGBA(94, 134, 200, 255)
-arena_wall = RGBA(196, 90, 62, 255)
-arena_upper = RGBA(140, 70, 50, 255)
-arena_lower = RGBA(220, 130, 90, 255)
-stair1_wall = RGBA(210, 130, 70, 255)
-stair2_wall = RGBA(220, 180, 80, 255)
-stair3_wall = RGBA(140, 210, 90, 255)
-stair4_wall = RGBA(90, 190, 220, 255)
-overlook_wall = RGBA(210, 220, 235, 255)
-alcove_wall = RGBA(220, 140, 190, 255)
+_main_wall = RGBA(158, 144, 115, 255)
+_main_upper = RGBA(110, 105, 92, 255)
+_main_lower = RGBA(118, 96, 72, 255)
+_pillar_wall = RGBA(210, 215, 225, 255)
+_catwalk_wall = RGBA(108, 170, 82, 255)
+_pit_wall = RGBA(140, 100, 180, 255)
+_corr_wall = RGBA(94, 134, 200, 255)
+_arena_wall = RGBA(196, 90, 62, 255)
+_arena_upper = RGBA(140, 70, 50, 255)
+_arena_lower = RGBA(220, 130, 90, 255)
+_stair1_wall = RGBA(210, 130, 70, 255)
+_stair2_wall = RGBA(220, 180, 80, 255)
+_stair3_wall = RGBA(140, 210, 90, 255)
+_stair4_wall = RGBA(90, 190, 220, 255)
+_overlook_wall = RGBA(210, 220, 235, 255)
+_alcove_wall = RGBA(220, 140, 190, 255)
 
-sectors: list[Sector] = [
+_sectors: list[Sector] = [
     # 0: Hub.
     Sector(floor_h=0, ceil_h=80,
            floor_color=RGBA(82, 76, 60, 255),
@@ -156,75 +160,123 @@ sectors: list[Sector] = [
            light=0.85),
 ]
 
-linedefs: list[LineDef] = [
+_linedefs: list[LineDef] = [
     # ---- Hub perimeter (front = 0) ----
-    LineDef(0, 1, 0, NO_SECTOR, main_wall, main_upper, main_lower),
-    LineDef(1, 2, 0, 2, main_wall, main_upper, catwalk_wall),       # → catwalk
-    LineDef(2, 3, 0, NO_SECTOR, main_wall, main_upper, main_lower),
-    LineDef(3, 4, 0, NO_SECTOR, main_wall, main_upper, main_lower),
-    LineDef(4, 5, 0, 4, main_wall, corr_wall, corr_wall),           # → corridor
-    LineDef(5, 6, 0, NO_SECTOR, main_wall, main_upper, main_lower),
-    LineDef(6, 7, 0, NO_SECTOR, main_wall, main_upper, main_lower),
-    LineDef(7, 8, 0, 3, main_wall, pit_wall, main_lower),           # → pit
-    LineDef(8, 9, 0, NO_SECTOR, main_wall, main_upper, main_lower),
-    LineDef(9, 0, 0, NO_SECTOR, main_wall, main_upper, main_lower),
+    LineDef(0, 1, 0, NO_SECTOR, _main_wall, _main_upper, _main_lower),
+    LineDef(1, 2, 0, 2, _main_wall, _main_upper, _catwalk_wall),       # → catwalk
+    LineDef(2, 3, 0, NO_SECTOR, _main_wall, _main_upper, _main_lower),
+    LineDef(3, 4, 0, NO_SECTOR, _main_wall, _main_upper, _main_lower),
+    LineDef(4, 5, 0, 4, _main_wall, _corr_wall, _corr_wall),           # → corridor
+    LineDef(5, 6, 0, NO_SECTOR, _main_wall, _main_upper, _main_lower),
+    LineDef(6, 7, 0, NO_SECTOR, _main_wall, _main_upper, _main_lower),
+    LineDef(7, 8, 0, 3, _main_wall, _pit_wall, _main_lower),           # → pit
+    LineDef(8, 9, 0, NO_SECTOR, _main_wall, _main_upper, _main_lower),
+    LineDef(9, 0, 0, NO_SECTOR, _main_wall, _main_upper, _main_lower),
 
     # ---- Octagonal pillar (one-sided, 8 facets, CW math) ----
-    LineDef(38, 10, 0, NO_SECTOR, pillar_wall, pillar_wall, pillar_wall),
-    LineDef(10, 41, 0, NO_SECTOR, pillar_wall, pillar_wall, pillar_wall),
-    LineDef(41, 13, 0, NO_SECTOR, pillar_wall, pillar_wall, pillar_wall),
-    LineDef(13, 40, 0, NO_SECTOR, pillar_wall, pillar_wall, pillar_wall),
-    LineDef(40, 12, 0, NO_SECTOR, pillar_wall, pillar_wall, pillar_wall),
-    LineDef(12, 39, 0, NO_SECTOR, pillar_wall, pillar_wall, pillar_wall),
-    LineDef(39, 11, 0, NO_SECTOR, pillar_wall, pillar_wall, pillar_wall),
-    LineDef(11, 38, 0, NO_SECTOR, pillar_wall, pillar_wall, pillar_wall),
+    LineDef(38, 10, 0, NO_SECTOR, _pillar_wall, _pillar_wall, _pillar_wall),
+    LineDef(10, 41, 0, NO_SECTOR, _pillar_wall, _pillar_wall, _pillar_wall),
+    LineDef(41, 13, 0, NO_SECTOR, _pillar_wall, _pillar_wall, _pillar_wall),
+    LineDef(13, 40, 0, NO_SECTOR, _pillar_wall, _pillar_wall, _pillar_wall),
+    LineDef(40, 12, 0, NO_SECTOR, _pillar_wall, _pillar_wall, _pillar_wall),
+    LineDef(12, 39, 0, NO_SECTOR, _pillar_wall, _pillar_wall, _pillar_wall),
+    LineDef(39, 11, 0, NO_SECTOR, _pillar_wall, _pillar_wall, _pillar_wall),
+    LineDef(11, 38, 0, NO_SECTOR, _pillar_wall, _pillar_wall, _pillar_wall),
 
     # ---- Catwalk (front = 2). N wall is a portal to stair 1. ----
-    LineDef(1, 14, 2, NO_SECTOR, catwalk_wall, catwalk_wall, catwalk_wall),
-    LineDef(14, 15, 2, 6, catwalk_wall, catwalk_wall, stair1_wall),  # → stair 1
-    LineDef(15, 2, 2, NO_SECTOR, catwalk_wall, catwalk_wall, catwalk_wall),
+    LineDef(1, 14, 2, NO_SECTOR, _catwalk_wall, _catwalk_wall, _catwalk_wall),
+    LineDef(14, 15, 2, 6, _catwalk_wall, _catwalk_wall, _stair1_wall),  # → stair 1
+    LineDef(15, 2, 2, NO_SECTOR, _catwalk_wall, _catwalk_wall, _catwalk_wall),
 
     # ---- Pit perimeter (front = 3, CCW math) ----
-    LineDef(7, 17, 3, NO_SECTOR, pit_wall, pit_wall, pit_wall),
-    LineDef(17, 16, 3, NO_SECTOR, pit_wall, pit_wall, pit_wall),
-    LineDef(16, 8, 3, NO_SECTOR, pit_wall, pit_wall, pit_wall),
+    LineDef(7, 17, 3, NO_SECTOR, _pit_wall, _pit_wall, _pit_wall),
+    LineDef(17, 16, 3, NO_SECTOR, _pit_wall, _pit_wall, _pit_wall),
+    LineDef(16, 8, 3, NO_SECTOR, _pit_wall, _pit_wall, _pit_wall),
 
     # ---- East corridor (front = 4) ----
-    LineDef(4, 18, 4, NO_SECTOR, corr_wall, corr_wall, corr_wall),
-    LineDef(18, 19, 4, 5, corr_wall, arena_upper, arena_lower),  # → arena
-    LineDef(19, 5, 4, NO_SECTOR, corr_wall, corr_wall, corr_wall),
+    LineDef(4, 18, 4, NO_SECTOR, _corr_wall, _corr_wall, _corr_wall),
+    LineDef(18, 19, 4, 5, _corr_wall, _arena_upper, _arena_lower),  # → arena
+    LineDef(19, 5, 4, NO_SECTOR, _corr_wall, _corr_wall, _corr_wall),
 
     # ---- Arena perimeter (front = 5). E wall split into 3. ----
-    LineDef(18, 20, 5, NO_SECTOR, arena_wall, arena_wall, arena_wall),  # N
-    LineDef(20, 34, 5, NO_SECTOR, arena_wall, arena_wall, arena_wall),  # E top
-    LineDef(21, 19, 5, NO_SECTOR, arena_wall, arena_wall, arena_wall),  # S
+    LineDef(18, 20, 5, NO_SECTOR, _arena_wall, _arena_wall, _arena_wall),  # N
+    LineDef(20, 34, 5, NO_SECTOR, _arena_wall, _arena_wall, _arena_wall),  # E top
+    LineDef(21, 19, 5, NO_SECTOR, _arena_wall, _arena_wall, _arena_wall),  # S
 
     # ---- Staircase: 4 steps + overlook. ----
-    LineDef(14, 22, 6, NO_SECTOR, stair1_wall, stair1_wall, stair1_wall),
-    LineDef(22, 23, 6, 7, stair1_wall, stair1_wall, stair2_wall),
-    LineDef(23, 15, 6, NO_SECTOR, stair1_wall, stair1_wall, stair1_wall),
-    LineDef(22, 24, 7, NO_SECTOR, stair2_wall, stair2_wall, stair2_wall),
-    LineDef(24, 25, 7, 8, stair2_wall, stair2_wall, stair3_wall),
-    LineDef(25, 23, 7, NO_SECTOR, stair2_wall, stair2_wall, stair2_wall),
-    LineDef(24, 26, 8, NO_SECTOR, stair3_wall, stair3_wall, stair3_wall),
-    LineDef(26, 27, 8, 9, stair3_wall, stair3_wall, stair4_wall),
-    LineDef(27, 25, 8, NO_SECTOR, stair3_wall, stair3_wall, stair3_wall),
-    LineDef(26, 28, 9, NO_SECTOR, stair4_wall, stair4_wall, stair4_wall),
-    LineDef(28, 29, 9, 10, stair4_wall, stair4_wall, overlook_wall),
-    LineDef(29, 27, 9, NO_SECTOR, stair4_wall, stair4_wall, stair4_wall),
+    LineDef(14, 22, 6, NO_SECTOR, _stair1_wall, _stair1_wall, _stair1_wall),
+    LineDef(22, 23, 6, 7, _stair1_wall, _stair1_wall, _stair2_wall),
+    LineDef(23, 15, 6, NO_SECTOR, _stair1_wall, _stair1_wall, _stair1_wall),
+    LineDef(22, 24, 7, NO_SECTOR, _stair2_wall, _stair2_wall, _stair2_wall),
+    LineDef(24, 25, 7, 8, _stair2_wall, _stair2_wall, _stair3_wall),
+    LineDef(25, 23, 7, NO_SECTOR, _stair2_wall, _stair2_wall, _stair2_wall),
+    LineDef(24, 26, 8, NO_SECTOR, _stair3_wall, _stair3_wall, _stair3_wall),
+    LineDef(26, 27, 8, 9, _stair3_wall, _stair3_wall, _stair4_wall),
+    LineDef(27, 25, 8, NO_SECTOR, _stair3_wall, _stair3_wall, _stair3_wall),
+    LineDef(26, 28, 9, NO_SECTOR, _stair4_wall, _stair4_wall, _stair4_wall),
+    LineDef(28, 29, 9, 10, _stair4_wall, _stair4_wall, _overlook_wall),
+    LineDef(29, 27, 9, NO_SECTOR, _stair4_wall, _stair4_wall, _stair4_wall),
     # Overlook (front = 10) — five solid walls.
-    LineDef(28, 30, 10, NO_SECTOR, overlook_wall, overlook_wall, overlook_wall),
-    LineDef(30, 32, 10, NO_SECTOR, overlook_wall, overlook_wall, overlook_wall),
-    LineDef(32, 33, 10, NO_SECTOR, overlook_wall, overlook_wall, overlook_wall),
-    LineDef(33, 31, 10, NO_SECTOR, overlook_wall, overlook_wall, overlook_wall),
-    LineDef(31, 29, 10, NO_SECTOR, overlook_wall, overlook_wall, overlook_wall),
+    LineDef(28, 30, 10, NO_SECTOR, _overlook_wall, _overlook_wall, _overlook_wall),
+    LineDef(30, 32, 10, NO_SECTOR, _overlook_wall, _overlook_wall, _overlook_wall),
+    LineDef(32, 33, 10, NO_SECTOR, _overlook_wall, _overlook_wall, _overlook_wall),
+    LineDef(33, 31, 10, NO_SECTOR, _overlook_wall, _overlook_wall, _overlook_wall),
+    LineDef(31, 29, 10, NO_SECTOR, _overlook_wall, _overlook_wall, _overlook_wall),
 
     # ---- Arena east middle = alcove portal + remaining E split. ----
-    LineDef(34, 35, 5, 11, arena_wall, arena_wall, alcove_wall),         # → alcove
-    LineDef(35, 21, 5, NO_SECTOR, arena_wall, arena_wall, arena_wall),
+    LineDef(34, 35, 5, 11, _arena_wall, _arena_wall, _alcove_wall),         # → alcove
+    LineDef(35, 21, 5, NO_SECTOR, _arena_wall, _arena_wall, _arena_wall),
 
     # ---- Alcove perimeter (front = 11). ----
-    LineDef(34, 36, 11, NO_SECTOR, alcove_wall, alcove_wall, alcove_wall),  # N
-    LineDef(36, 37, 11, NO_SECTOR, alcove_wall, alcove_wall, alcove_wall),  # E
-    LineDef(37, 35, 11, NO_SECTOR, alcove_wall, alcove_wall, alcove_wall),  # S
+    LineDef(34, 36, 11, NO_SECTOR, _alcove_wall, _alcove_wall, _alcove_wall),  # N
+    LineDef(36, 37, 11, NO_SECTOR, _alcove_wall, _alcove_wall, _alcove_wall),  # E
+    LineDef(37, 35, 11, NO_SECTOR, _alcove_wall, _alcove_wall, _alcove_wall),  # S
 ]
+
+
+@dataclass(slots=True, frozen=True)
+class Level:
+    """The map, as an object rather than three loose module globals.
+
+    A Level owns the hand-authored geometry (vertices, sectors, linedefs) and
+    knows how to flatten its linedefs into the renderable seg list the BSP
+    consumes. Threading a Level through the Bsp builder, the Player, and the
+    Renderer makes the map dependency explicit and keeps the world out of
+    global state — there is no reason two Levels couldn't coexist."""
+
+    vertices: list[Vec2]
+    sectors: list[Sector]
+    linedefs: list[LineDef]
+
+    def generate_segs(self) -> list[Seg]:
+        """Flatten the linedef list into the seg list that the BSP builder will
+        consume.
+
+        One-sided linedefs produce ONE seg in their authored direction (front
+        side only, because the back is solid and never visible).
+
+        Two-sided linedefs produce TWO segs — the second runs in reverse and
+        has its front/back sectors swapped. The BSP needs both because each
+        side of a portal will be rasterized from its own sector during
+        traversal, with its own ceiling/floor heights and per-sector light.
+        """
+        out: list[Seg] = []
+        for i, l in enumerate(self.linedefs):
+            a = self.vertices[l.v1]
+            b = self.vertices[l.v2]
+            # Authored direction (front side).
+            out.append(Seg(v1=a, v2=b,
+                           front_sector=l.front_sector,
+                           back_sector=l.back_sector,
+                           linedef_index=i))
+            # Reverse direction (back side) for two-sided linedefs.
+            if l.back_sector != NO_SECTOR:
+                out.append(Seg(v1=b, v2=a,
+                               front_sector=l.back_sector,
+                               back_sector=l.front_sector,
+                               linedef_index=i))
+        return out
+
+
+# The single hand-authored showcase map.
+SHOWCASE = Level(vertices=_vertices, sectors=_sectors, linedefs=_linedefs)

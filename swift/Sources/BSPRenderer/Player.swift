@@ -42,7 +42,7 @@ final class Player {
         static let up: UInt16 = 126
     }
 
-    func update(dt: Double, keys: Set<UInt16>, bspRoot: BSPNode) {
+    func update(dt: Double, keys: Set<UInt16>, level: Level, bsp: Bsp) {
         let rot = rotSpeed * dt
         let mv = moveSpeed * dt
 
@@ -58,27 +58,27 @@ final class Player {
 
         // Axis-separated probe against all solid linedefs with a player radius.
         let radius = 8.0
-        let currentFloorH = sectors[findSector(pos: pos, node: bspRoot)].floorH
+        let currentFloorH = level.sectors[bsp.findSector(pos)].floorH
         let tryX = Vec2(x: pos.x + dx, y: pos.y)
-        if !collides(tryX, radius: radius, currentFloorH: currentFloorH) { pos.x = tryX.x }
+        if !collides(tryX, radius: radius, currentFloorH: currentFloorH, level: level) { pos.x = tryX.x }
         let tryY = Vec2(x: pos.x, y: pos.y + dy)
-        if !collides(tryY, radius: radius, currentFloorH: currentFloorH) { pos.y = tryY.y }
+        if !collides(tryY, radius: radius, currentFloorH: currentFloorH, level: level) { pos.y = tryY.y }
 
         // Feet track the current sector's floor exactly. No gravity/air time
         // needed because the camera is fixed-baseline — visual step-up/down
         // comes from the floor itself moving on screen, not the camera.
-        feetZ = sectors[findSector(pos: pos, node: bspRoot)].floorH
+        feetZ = level.sectors[bsp.findSector(pos)].floorH
     }
 
-    private func collides(_ p: Vec2, radius: Double, currentFloorH: Double) -> Bool {
+    private func collides(_ p: Vec2, radius: Double, currentFloorH: Double, level: Level) -> Bool {
         let maxStepUp = 24.0
-        for l in linedefs {
-            let a = vertices[l.v1]
-            let b = vertices[l.v2]
+        for l in level.linedefs {
+            let a = level.vertices[l.v1]
+            let b = level.vertices[l.v2]
             if pointSegmentDistance(p, a, b) >= radius { continue }
             guard let bi = l.backSector else { return true }   // solid wall
-            let front = sectors[l.frontSector]
-            let back = sectors[bi]
+            let front = level.sectors[l.frontSector]
+            let back = level.sectors[bi]
             // Opening must clear the player's standing height.
             let openingTop = min(front.ceilH, back.ceilH)
             let openingBottom = max(front.floorH, back.floorH)

@@ -27,8 +27,8 @@ import math
 
 import numpy as np
 
-from bsp import BSPNode, find_sector, traverse_bsp
-from level import linedefs, sectors, vertices
+from bsp import Bsp
+from level import Level
 from math_utils import RGBA, Vec2, clamp_f, shade
 from geometry import NO_SECTOR, Seg
 from player import Player
@@ -36,15 +36,16 @@ from visplane import Visplane
 
 
 class Renderer:
-    def __init__(self, width: int, height: int) -> None:
+    def __init__(self, width: int, height: int, level: Level) -> None:
         self.buf_w = width
         self.buf_h = height
+        self.level = level
         # (H, W, 4) row-major RGBA — pygame.image.frombuffer reads this layout.
         self.pixels = np.zeros((height, width, 4), dtype=np.uint8)
         self.y_top = np.zeros(width, dtype=np.int32)
         self.y_bot = np.zeros(width, dtype=np.int32)
         self.visplanes: list[Visplane] = []
-        for si in range(len(sectors)):
+        for si in range(len(level.sectors)):
             self.visplanes.append(Visplane(si, False, width))  # floor at 2*si
             self.visplanes.append(Visplane(si, True, width))   # ceiling at 2*si+1
 
@@ -54,7 +55,7 @@ class Renderer:
 
     # ---- Core: per-frame entry point --------------------------------------
 
-    def render(self, p: Player, bsp_root: BSPNode) -> None:
+    def render(self, p: Player, bsp: Bsp) -> None:
         """Run one full frame:
           1. Reset per-column open region and per-frame visplane coverage.
           2. Background fill (dim ceiling/floor of the player's current sector)
@@ -69,8 +70,8 @@ class Renderer:
         for v in self.visplanes:
             v.reset()
 
-        player_sector = find_sector(p.pos, bsp_root)
-        sec = sectors[player_sector]
+        player_sector = bsp.find_sector(p.pos)
+        sec = self.level.sectors[player_sector]
         half_w = self.buf_w / 2.0
         half_h = self.buf_h / 2.0
         horizon = half_h
@@ -93,7 +94,7 @@ class Renderer:
 
         if self.slow_mode:
             buffered: list[Seg] = []
-            traverse_bsp(bsp_root, p.pos, buffered.append)
+            bsp.traverse(p.pos, buffered.append)
             self.slow_column_budget = self.slow_step
             for s in buffered:
                 self._draw_seg(s, p, cos_a, sin_a, half_w, horizon, fov_half_tan, focal, eye_z)
@@ -102,8 +103,8 @@ class Renderer:
             else:
                 self.slow_step += 1
         else:
-            traverse_bsp(
-                bsp_root, p.pos,
+            bsp.traverse(
+                p.pos,
                 lambda s: self._draw_seg(s, p, cos_a, sin_a, half_w, horizon, fov_half_tan, focal, eye_z),
             )
 
@@ -234,16 +235,16 @@ class Renderer:
         if x_start > x_end:
             return
 
-        front = sectors[seg.front_sector]
+        front = self.level.sectors[seg.front_sector]
         f_ceil = front.ceil_h - eye_z
         f_floor = front.floor_h - eye_z
         b_ceil = b_floor = 0.0
         if seg.back_sector != NO_SECTOR:
-            back = sectors[seg.back_sector]
+            back = self.level.sectors[seg.back_sector]
             b_ceil = back.ceil_h - eye_z
             b_floor = back.floor_h - eye_z
 
-        line_def = linedefs[seg.linedef_index]
+        line_def = self.level.linedefs[seg.linedef_index]
         front_light = front.light
 
         inv_d1 = 1.0 / d1
@@ -353,7 +354,7 @@ class Renderer:
         for plane in self.visplanes:
             if plane.max_x < plane.min_x:
                 continue
-            sec = sectors[plane.sector_index]
+            sec = self.level.sectors[plane.sector_index]
             if plane.is_ceiling:
                 plane_z = sec.ceil_h
                 color = sec.ceil_color
@@ -447,6 +448,7 @@ class Renderer:
         """Top-down preview of the level in the upper-left: dark backdrop,
         all linedefs (one-sided in their wall color, two-sided gray), player
         marker with a heading line."""
+        vertices = self.level.vertices
         min_x = min(v.x for v in vertices)
         min_y = min(v.y for v in vertices)
         max_x = max(v.x for v in vertices)
@@ -472,7 +474,7 @@ class Renderer:
                 self._put_pixel(x, y, backdrop)
 
         # Linedefs.
-        for l in linedefs:
+        for l in self.level.linedefs:
             ax, ay = project(vertices[l.v1])
             bx, by = project(vertices[l.v2])
             col = RGBA(120, 120, 120, 255) if l.back_sector != NO_SECTOR else l.wall_color

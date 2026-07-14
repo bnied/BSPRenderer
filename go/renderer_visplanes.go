@@ -19,7 +19,7 @@ func (r *Renderer) renderVisplanes(focal, halfW, horizon float64,
 		if plane.maxX < plane.minX {
 			continue // never written this frame
 		}
-		sec := sectors[plane.sectorIndex]
+		sec := r.level.sector(plane.sectorIndex)
 
 		var planeZ float64
 		var color RGBA

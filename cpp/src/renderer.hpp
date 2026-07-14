@@ -22,12 +22,14 @@
 #include "player.hpp"
 #include "visplane.hpp"
 
+class Level;
+
 class Renderer {
 public:
-    Renderer(int width, int height);
+    Renderer(int width, int height, const Level& level);
 
     // Run one full frame: reset, BSP walk, visplane pass, overlays.
-    void render(const Player& player, const BSPNode& bspRoot);
+    void render(const Player& player, const Bsp& bsp);
 
     int width()  const { return bufW; }
     int height() const { return bufH; }
@@ -62,6 +64,7 @@ private:
     void drawMinimap(const Player& player);
     void drawLine(int x0, int y0, int x1, int y1, RGBA color);
 
+    const Level& level;
     int bufW;
     int bufH;
     std::vector<std::uint8_t> pixels;
